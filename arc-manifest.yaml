@@ -1,0 +1,25 @@
+# arc-manifest.yaml — capability declaration
+schema: arc/v1
+name: code-review
+version: 0.1.0
+type: skill
+tier: custom
+
+author:
+  name: mellanon
+  github: mellanon
+
+license: MIT
+
+provides:
+  skill:
+    - trigger: "review PR"
+    - trigger: "code review"
+    - trigger: "security audit"
+
+capabilities:
+  bash:
+    allowed: true
+    restricted_to:
+      - "gh pr *"
+      - "gh api *"
