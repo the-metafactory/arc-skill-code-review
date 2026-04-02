@@ -39,9 +39,9 @@ These define user-specific preferences. If the directory does not exist, proceed
 
 | Workflow | Trigger | File |
 |----------|---------|------|
-| **StandardReview** | "review PR", "review PR #N" | `Workflows/StandardReview.md` |
+| **FullReview** | "review PR", "review PR #N" (default) | `Workflows/FullReview.md` |
 | **SecurityReview** | "security review", "review for security", "OWASP audit" | `Workflows/SecurityReview.md` |
-| **FullReview** | "full review", "comprehensive review" | `Workflows/FullReview.md` |
+| **StandardReview** | "quick review", "lightweight review" | `Workflows/StandardReview.md` |
 
 ## Lens Selection Logic
 
