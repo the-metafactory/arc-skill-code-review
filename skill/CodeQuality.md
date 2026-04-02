@@ -67,6 +67,13 @@
 - [ ] **No unrelated changes.** The PR should not include formatting changes, dependency updates, or refactors unrelated to the stated purpose.
 - [ ] **Meaningful commit messages.** Messages explain WHY, not just WHAT. "Fix race condition in session cleanup" not "fix bug".
 
+### 8. Code Duplication
+
+- [ ] **No copy-pasted blocks.** If the same logic appears in 2+ places in the PR, extract it. Three similar lines is fine — three similar paragraphs is not.
+- [ ] **No re-implementation of existing utilities.** Check if the codebase already has a function that does what the new code does.
+- [ ] **Repeated patterns across files signal a missing abstraction.** If multiple files follow the same boilerplate sequence, consider whether a shared helper or base class is warranted.
+- [ ] **DRY applies to knowledge, not just code.** Two functions with similar-looking code that serve different purposes and will evolve independently are NOT duplication — forced extraction would create coupling.
+
 ---
 
 ## Severity Guide
@@ -81,3 +88,6 @@
 | Minor style inconsistency | **nit** |
 | Unnecessary type assertion | **suggestion** |
 | TODO without issue reference | **suggestion** |
+| Copy-pasted block with 3+ similar lines | **warning** |
+| Re-implementation of existing utility | **warning** |
+| Forced extraction creating coupling | **nit** (don't flag) |
