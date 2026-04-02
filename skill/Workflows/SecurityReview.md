@@ -114,7 +114,29 @@ Load `Security.md` from the skill root and apply its complete checklist. This is
 - Verify URL allowlists for outbound requests
 - Check for redirect following that could reach internal services
 
-### Step 5: Post Findings
+### Step 5: Run Code Duplication Analysis
+
+This step runs **last**, after all other lenses, because it requires comparing the PR against the full repository.
+
+**Scope:** Compare the PR's new and changed code against the **entire repository**, not just the diff.
+
+1. For each new function, class, or significant block introduced by the PR, search the full repository for similar logic:
+   ```bash
+   # For each new function/pattern, search the repo for similar code
+   grep -rn "{key pattern from new code}" --include="*.ts" --include="*.js" --include="*.py" .
+   ```
+
+2. Check for:
+   - **Copy-pasted blocks** — New code that duplicates existing repository code verbatim or near-verbatim
+   - **Re-implemented utilities** — New code that does what an existing function in the repo already does
+   - **Repeated boilerplate across files** — The PR introduces a pattern that already exists elsewhere, signaling a missing shared abstraction
+   - **Within-PR duplication** — The same logic appears in multiple files within the PR itself
+
+3. Apply the DRY knowledge principle: Two functions with similar-looking code that serve **different purposes** and will evolve independently are NOT duplication. Only flag duplication where extraction would reduce bugs or maintenance burden.
+
+Record findings: severity, lens=duplication, file/line, finding, fix (reference the existing code location).
+
+### Step 6: Post Findings
 
 Post all findings as PR comments with `[security]` tags.
 
@@ -153,7 +175,7 @@ gh pr comment {N} --repo {owner/repo} --body "## Security Review Summary
 {rationale}"
 ```
 
-### Step 6: Post Verdict
+### Step 7: Post Verdict
 
 Security reviews use stricter verdict criteria:
 

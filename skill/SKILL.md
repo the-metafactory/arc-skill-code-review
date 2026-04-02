@@ -55,9 +55,11 @@ These define user-specific preferences. If the directory does not exist, proceed
 | CLAUDE.md, arc-manifest.yaml, labels, repo config | + EcosystemCompliance |
 | Database queries, hot paths, data processing loops | + Performance |
 
-**SecurityReview** applies CodeQuality + Security lenses regardless of content.
+**SecurityReview** applies CodeQuality + Security lenses regardless of content, plus duplication analysis.
 
 **FullReview** applies all 5 lenses sequentially.
+
+**All workflows** finish with a Code Duplication analysis step that compares the PR's new code against the entire repository, not just the diff. This catches re-implemented utilities and copy-paste from existing code that per-file lens checks miss.
 
 ## Lens Reference Files
 
