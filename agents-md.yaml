@@ -1,0 +1,23 @@
+# agents-md.yaml — repo-specific agent rules configuration
+# Used by `arc upgrade compass` to generate agent rule files
+# See compass/docs/design-claude-md-sync.md for the full design spec.
+
+template: compass-standards
+
+# Which rule file formats to generate
+generate:
+  - format: claude-md
+
+# Placeholder values (substituted into templates)
+repo_name: arc-skill-code-review
+repo_description: "Multi-lens PR review skill for Claude Code"
+deploy_command: "arc upgrade code-review"
+version_source: arc-manifest.yaml
+release_title_format: '"CodeReview vX.Y.Z — Short Description"'
+worktree_pattern: "../arc-skill-code-review-{slug}"
+sop_path_prefix: "compass/"
+
+# Repo-specific sections injected at marked positions in the template
+sections:
+  - position: "after:description"
+    file: docs/agents-md/architecture.md
