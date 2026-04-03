@@ -1,6 +1,6 @@
 ---
 name: CodeReview
-description: Multi-lens pull request review with automated findings. USE WHEN review PR, code review, security review, audit PR, check PR, OWASP review, architecture review, review for security, full review, hardening review, API hardening, defensive review.
+description: Multi-lens pull request review with automated findings. USE WHEN review PR, code review, security review, audit PR, check PR, OWASP review, architecture review, review for security, full review, hardening review, API hardening, defensive review, skill review, review skill, evaluate skill.
 ---
 
 # CodeReview
@@ -42,6 +42,7 @@ These define user-specific preferences. If the directory does not exist, proceed
 | **FullReview** | "review PR", "review PR #N" (default) | `Workflows/FullReview.md` |
 | **SecurityReview** | "security review", "review for security", "OWASP audit" | `Workflows/SecurityReview.md` |
 | **HardeningReview** | "hardening review", "API hardening", "hardening audit", "defensive review" | `Workflows/HardeningReview.md` |
+| **SkillReview** | "skill review", "review skill", "evaluate skill", "skill quality" | `Workflows/SkillReview.md` |
 | **StandardReview** | "quick review", "lightweight review" | `Workflows/StandardReview.md` |
 
 ## Lens Selection Logic
@@ -60,7 +61,9 @@ These define user-specific preferences. If the directory does not exist, proceed
 
 **HardeningReview** applies CodeQuality + Security (targeted) + Hardening lenses, plus duplication analysis. Checks for defensive infrastructure patterns rather than exploitable vulnerabilities.
 
-**FullReview** applies all 6 lenses sequentially.
+**SkillReview** applies the SkillQuality lens to evaluate a Claude Code skill against authoring best practices. Not part of FullReview — standalone workflow invoked on request.
+
+**FullReview** applies all 6 lenses sequentially (does not include SkillReview — that's a separate workflow).
 
 ## Lens Reference Files
 
@@ -72,6 +75,7 @@ Each lens is a detailed checklist loaded on-demand by workflows:
 - `Architecture.md` — SRP, coupling, pattern consistency, abstraction level, API surface
 - `EcosystemCompliance.md` — CLAUDE.md, arc-manifest, labels, SOP table, conventional commits
 - `Performance.md` — N+1 queries, unbounded loops, pagination, memory leaks, blocking in async
+- `SkillQuality.md` — Skill structure, description quality, activation triggers, examples, progressive disclosure, anti-patterns
 
 ## Examples
 
@@ -104,7 +108,18 @@ User: "hardening review on PR #12"
 -> Verdict based on defensive posture assessment
 ```
 
-**Example 4: Comprehensive review**
+**Example 4: Skill quality review**
+```
+User: "review skill at ~/.claude/skills/my-skill"
+-> Invokes SkillReview workflow
+-> Reads SKILL.md, all referenced files, folder structure
+-> Applies: SkillQuality (SK-01 through SK-08)
+-> Posts quality assessment table (pass/partial/fail per category)
+-> Activation tier estimate (Unoptimized/Basic/Good/Excellent)
+-> Verdict based on overall skill quality
+```
+
+**Example 5: Comprehensive review**
 ```
 User: "full review PR #42"
 -> Invokes FullReview workflow

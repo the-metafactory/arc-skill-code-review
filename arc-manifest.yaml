@@ -17,6 +17,7 @@ provides:
     - trigger: "code review"
     - trigger: "security audit"
     - trigger: "hardening review"
+    - trigger: "skill review"
 
 capabilities:
   bash:
