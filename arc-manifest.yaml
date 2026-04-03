@@ -16,6 +16,7 @@ provides:
     - trigger: "review PR"
     - trigger: "code review"
     - trigger: "security audit"
+    - trigger: "hardening review"
 
 capabilities:
   bash:
