@@ -1,6 +1,6 @@
 # FullReview Workflow
 
-Comprehensive review applying all 5 lenses sequentially. Use this when asked for a "full review" or "comprehensive review" — nothing is skipped, every lens is applied regardless of content.
+Comprehensive review applying all 6 lenses sequentially. Use this when asked for a "full review" or "comprehensive review" — nothing is skipped, every lens is applied regardless of content.
 
 ---
 
@@ -8,7 +8,7 @@ Comprehensive review applying all 5 lenses sequentially. Use this when asked for
 
 Output this status line before proceeding:
 ```
-SOP: pr-review | PR: {owner/repo}#{N} | Lenses: quality,security,architecture,ecosystem,performance
+SOP: pr-review | PR: {owner/repo}#{N} | Lenses: quality,security,hardening,architecture,ecosystem,performance
 ```
 
 ---
@@ -54,7 +54,23 @@ Even if the PR does not appear security-sensitive, check for:
 
 Record findings: severity, lens=security, file/line, finding, fix.
 
-### Step 5: Run Architecture Lens
+### Step 5: Run Hardening Lens
+
+Load `Hardening.md` from the skill root. Apply the full defensive infrastructure checklist (H-01 through H-08).
+
+Check:
+- Authentication layer present and strict on all API endpoints
+- CORS configuration uses explicit origin allowlist
+- Rate limiting on write and auth endpoints
+- Input validation at all system boundaries (parameterized queries, JSON parse error handling, enum/datetime/length validation)
+- Audit logging for auth events, authorization failures, and mutations
+- PII handling policy documented or evident
+- API key lifecycle with metadata and persistent validation
+- Webhook/callback signature verification with constant-time comparison
+
+Record findings: severity, lens=hardening, file/line, finding, fix.
+
+### Step 6: Run Architecture Lens
 
 Load `Architecture.md` from the skill root. Apply the full structural checklist.
 
@@ -67,7 +83,7 @@ Evaluate:
 
 Record findings: severity, lens=architecture, file/line, finding, fix.
 
-### Step 6: Run EcosystemCompliance Lens
+### Step 7: Run EcosystemCompliance Lens
 
 Load `EcosystemCompliance.md` from the skill root. Apply the full metafactory standards checklist.
 
@@ -80,7 +96,7 @@ Check:
 
 Record findings: severity, lens=ecosystem, file/line, finding, fix.
 
-### Step 7: Run Performance Lens
+### Step 8: Run Performance Lens
 
 Load `Performance.md` from the skill root. Apply the full performance checklist.
 
@@ -94,7 +110,7 @@ Check:
 
 Record findings: severity, lens=performance, file/line, finding, fix.
 
-### Step 8: Post Findings by Lens
+### Step 9: Post Findings by Lens
 
 Post findings organized by lens. Use inline comments for file-specific findings, general comments for cross-cutting observations.
 
@@ -121,7 +137,7 @@ gh api repos/{owner}/{repo}/pulls/{N}/comments \
   --field line={line_number}
 ```
 
-### Step 9: Post Summary and Verdict
+### Step 10: Post Summary and Verdict
 
 Post a final summary comment aggregating all lens results:
 
@@ -133,6 +149,7 @@ gh pr comment {N} --repo {owner/repo} --body "## Full Review Summary: {owner/rep
 |------|----------|---------|------------|-----|---------|
 | CodeQuality | {n} | {n} | {n} | {n} | {pass/fail} |
 | Security | {n} | {n} | {n} | {n} | {pass/fail} |
+| Hardening | {n} | {n} | {n} | {n} | {pass/fail} |
 | Architecture | {n} | {n} | {n} | {n} | {pass/fail} |
 | EcosystemCompliance | {n} | {n} | {n} | {n} | {pass/fail} |
 | Performance | {n} | {n} | {n} | {n} | {pass/fail} |
@@ -141,10 +158,10 @@ gh pr comment {N} --repo {owner/repo} --body "## Full Review Summary: {owner/rep
 {rationale summarizing the most important findings across all lenses}"
 ```
 
-### Step 10: Submit Review
+### Step 11: Submit Review
 
 ```bash
-gh pr review {N} --repo {owner/repo} --approve --body "Full review (5 lenses) passed. No blocking findings."
+gh pr review {N} --repo {owner/repo} --approve --body "Full review (6 lenses) passed. No blocking findings."
 # or
 gh pr review {N} --repo {owner/repo} --request-changes --body "Full review found critical issues. See per-lens comments."
 # or
@@ -163,12 +180,13 @@ Verdict criteria:
 ```
 ## Full Review: {owner/repo}#{N}
 
-### Lenses Applied (5/5)
+### Lenses Applied (6/6)
 1. CodeQuality — {pass/fail} ({n} findings)
 2. Security — {pass/fail} ({n} findings)
-3. Architecture — {pass/fail} ({n} findings)
-4. EcosystemCompliance — {pass/fail} ({n} findings)
-5. Performance — {pass/fail} ({n} findings)
+3. Hardening — {pass/fail} ({n} findings)
+4. Architecture — {pass/fail} ({n} findings)
+5. EcosystemCompliance — {pass/fail} ({n} findings)
+6. Performance — {pass/fail} ({n} findings)
 
 ### Critical Findings
 {List of critical findings requiring immediate attention}
