@@ -123,13 +123,17 @@ This step runs **last**, after all other lenses, because it requires comparing t
 1. For each new function, class, or significant block introduced by the PR, search the full repository for similar logic:
    ```bash
    # For each new function/pattern, search the repo for similar code
-   grep -rn "{key pattern from new code}" --include="*.ts" --include="*.js" .
+   grep -rn "{key pattern from new code}" --include="*.ts" --include="*.js" --include="*.py" .
    ```
 
-2. Check specifically for:
+2. Check specifically for security-relevant duplication:
    - **Security logic reimplemented** — Does the PR duplicate existing auth/validation helpers instead of using them?
    - **Error handling pattern duplicated** — Is the same error-handling sequence written inline instead of using a shared helper?
    - **Validation logic repeated** — Are the same validation checks written in multiple handlers?
+   - **Re-implemented utilities** — New code that does what an existing function in the repo already does
+   - **Within-PR duplication** — The same logic appears in multiple files within the PR itself
+
+3. Apply the DRY knowledge principle: Two functions with similar-looking code that serve **different purposes** and will evolve independently are NOT duplication. Only flag duplication where extraction would reduce bugs or maintenance burden.
 
 Record findings: severity, lens=duplication, file/line, finding, fix (reference the existing code location).
 

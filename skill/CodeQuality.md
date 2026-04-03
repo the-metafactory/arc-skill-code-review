@@ -48,6 +48,7 @@
 
 - [ ] **No `any` type.** Use proper types. If truly dynamic, use `unknown` and narrow.
 - [ ] **No non-null assertions (`!`) without justification.** Each `!` should have a comment explaining why the value is guaranteed non-null.
+- [ ] **No `as any` casts.** `as any` disables all type checking and is almost never justified. If the type system is fighting you, fix the types — don't escape them. Flag every `as any` as a warning.
 - [ ] **No type assertions (`as`) without justification.** Prefer type narrowing (type guards, instanceof) over assertions.
 - [ ] **Generic types are constrained.** `<T>` should be `<T extends SomeBase>` when a base is known.
 - [ ] **Return types are explicit on public functions.** Don't rely on inference for exported functions — explicit return types document the contract.
@@ -86,6 +87,7 @@
 | Missing tests for new code | **warning** |
 | Vague naming that obscures intent | **suggestion** |
 | Minor style inconsistency | **nit** |
+| `as any` cast | **warning** |
 | Unnecessary type assertion | **suggestion** |
 | TODO without issue reference | **suggestion** |
 | Copy-pasted block with 3+ similar lines | **warning** |

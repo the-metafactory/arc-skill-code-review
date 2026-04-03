@@ -6,5 +6,8 @@
   "scripts": {
     "test": "bun test"
   },
-  "dependencies": {}
+  "dependencies": {},
+  "devDependencies": {
+    "yaml": "^2.8.3"
+  }
 }

@@ -65,6 +65,8 @@ These define user-specific preferences. If the directory does not exist, proceed
 
 **FullReview** applies all 6 lenses sequentially (does not include SkillReview — that's a separate workflow).
 
+**All workflows** finish with a Code Duplication analysis step that compares the PR's new code against the entire repository, not just the diff. This catches re-implemented utilities and copy-paste from existing code that per-file lens checks miss.
+
 ## Lens Reference Files
 
 Each lens is a detailed checklist loaded on-demand by workflows:
