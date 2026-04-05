@@ -9,7 +9,8 @@
 ### 1. Single Responsibility Principle
 
 - [ ] **Each module has one reason to change.** A file that handles HTTP routing AND database queries AND email sending violates SRP.
-- [ ] **Each function has one purpose.** If a function name contains "and" (even implicitly), it probably does too much.
+- [ ] **Each function has one purpose.** If a function name contains "and" (even implicitly), it probably does too much. A function must have exactly one responsibility — not "fetch and transform" or "validate and save".
+- [ ] **Functions are under 25 lines.** Functions longer than 25 lines should be broken into smaller, well-named functions. Each extracted function should represent a single logical step.
 - [ ] **Side effects are contained.** Functions that compute values should not also write to disk, send network requests, or mutate global state. Separate pure logic from I/O.
 - [ ] **Configuration is separated from logic.** Hardcoded values that may vary between environments should be in configuration, not in business logic.
 
@@ -67,6 +68,8 @@
 | Breaking change to public API without migration | **critical** |
 | Business logic in infrastructure layer | **warning** |
 | New pattern without justification | **warning** |
+| Function over 25 lines | **suggestion** |
+| Function with multiple responsibilities | **warning** |
 | Premature abstraction (one implementation) | **suggestion** |
 | Minor naming convention inconsistency | **nit** |
 | Missing export documentation | **nit** |
