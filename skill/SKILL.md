@@ -88,7 +88,7 @@ User: "review PR #42"
 -> Reads PR diff, detects API endpoint changes + new module
 -> Applies: CodeQuality + Security + Architecture
 -> Posts inline findings as PR comments
--> Posts verdict (approve/request-changes/comment)
+-> Posts verdict (approve/request-changes)
 ```
 
 **Example 2: Focused security review**

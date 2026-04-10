@@ -147,16 +147,15 @@ gh pr comment {N} --repo {owner/repo} --body "## Review: {lens} lens
 
 Determine verdict based on findings:
 
-- **Approve** if no critical or warning findings
-- **Request changes** if any critical findings
-- **Comment** if only suggestions and nits
+- **Approve** only if there are ZERO findings — no criticals, no warnings, no suggestions, no nits
+- **Request changes** if there are ANY findings at all — every finding surfaced in a review must be addressed (fixed or explicitly acknowledged with rationale) before merge
+
+There is no "comment" verdict. If the review found something worth mentioning, it's worth addressing. Do not label findings as "non-blocking" — all review feedback must be resolved before merge.
 
 ```bash
-gh pr review {N} --repo {owner/repo} --approve --body "Lenses applied: {list}. No blocking findings."
+gh pr review {N} --repo {owner/repo} --approve --body "Lenses applied: {list}. Zero findings."
 # or
-gh pr review {N} --repo {owner/repo} --request-changes --body "Critical findings need addressing before merge."
-# or
-gh pr review {N} --repo {owner/repo} --comment --body "Suggestions only — non-blocking. Lenses applied: {list}."
+gh pr review {N} --repo {owner/repo} --request-changes --body "Findings need addressing before merge. Lenses applied: {list}."
 ```
 
 ---

@@ -178,18 +178,17 @@ gh pr comment {N} --repo {owner/repo} --body "## Security Review Summary
 
 ### Step 7: Post Verdict
 
-Security reviews use stricter verdict criteria:
+Verdict criteria:
 
-- **Approve** if no critical or warning security findings AND no critical quality findings
-- **Request changes** if ANY critical security finding OR 2+ warning security findings
-- **Comment** if only suggestion-level security findings
+- **Approve** only if there are ZERO findings — no criticals, no warnings, no suggestions, no nits
+- **Request changes** if there are ANY findings at all — every finding surfaced in a review must be addressed (fixed or explicitly acknowledged with rationale) before merge
+
+There is no "comment" verdict. If the review found something worth mentioning, it's worth addressing. Do not label findings as "non-blocking" — all review feedback must be resolved before merge.
 
 ```bash
-gh pr review {N} --repo {owner/repo} --approve --body "Security review passed. OWASP categories checked, no blocking findings."
+gh pr review {N} --repo {owner/repo} --approve --body "Security review passed. OWASP categories checked. Zero findings."
 # or
-gh pr review {N} --repo {owner/repo} --request-changes --body "Security findings require remediation before merge."
-# or
-gh pr review {N} --repo {owner/repo} --comment --body "Security suggestions noted — non-blocking."
+gh pr review {N} --repo {owner/repo} --request-changes --body "Security findings need addressing before merge."
 ```
 
 ---

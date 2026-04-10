@@ -184,17 +184,16 @@ gh pr comment {N} --repo {owner/repo} --body "## Full Review Summary: {owner/rep
 ### Step 12: Submit Review
 
 ```bash
-gh pr review {N} --repo {owner/repo} --approve --body "Full review (6 lenses + duplication) passed. No blocking findings."
+gh pr review {N} --repo {owner/repo} --approve --body "Full review (6 lenses + duplication) passed. Zero findings."
 # or
-gh pr review {N} --repo {owner/repo} --request-changes --body "Full review found critical issues. See per-lens comments."
-# or
-gh pr review {N} --repo {owner/repo} --comment --body "Full review complete. Suggestions noted — non-blocking."
+gh pr review {N} --repo {owner/repo} --request-changes --body "Full review found findings that should be addressed. See per-lens comments."
 ```
 
 Verdict criteria:
-- **Approve** if no critical findings in ANY lens and no more than 2 warnings total
-- **Request changes** if any critical finding in any lens OR 3+ warnings across lenses
-- **Comment** if only suggestions and nits
+- **Approve** only if there are ZERO findings across all lenses — no criticals, no warnings, no suggestions, no nits
+- **Request changes** if there are ANY findings at all — every finding surfaced in a review must be addressed (fixed or explicitly acknowledged with rationale) before merge
+
+There is no "comment" verdict. If the review found something worth mentioning, it's worth addressing. Do not label findings as "non-blocking" — all review feedback must be resolved before merge.
 
 ---
 

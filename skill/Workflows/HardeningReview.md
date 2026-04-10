@@ -142,18 +142,17 @@ gh pr comment {N} --repo {owner/repo} --body "## Hardening Review Summary
 
 ### Step 8: Post Verdict
 
-Hardening reviews use these verdict criteria:
+Verdict criteria:
 
-- **Approve** if all applicable hardening categories are present or n/a, AND no critical/warning security findings
-- **Request changes** if ANY applicable hardening category is missing AND rated warning+ severity, OR 2+ warning-level findings across lenses
-- **Comment** if hardening gaps exist but are documented as intentional or deferred to a tracked phase
+- **Approve** only if there are ZERO findings — all applicable hardening categories present or n/a, no findings of any severity
+- **Request changes** if there are ANY findings at all — every finding surfaced in a review must be addressed (fixed or explicitly acknowledged with rationale) before merge
+
+There is no "comment" verdict. If the review found something worth mentioning, it's worth addressing. Do not label findings as "non-blocking" — all review feedback must be resolved before merge.
 
 ```bash
-gh pr review {N} --repo {owner/repo} --approve --body "Hardening review passed. Defensive patterns verified."
+gh pr review {N} --repo {owner/repo} --approve --body "Hardening review passed. Defensive patterns verified. Zero findings."
 # or
-gh pr review {N} --repo {owner/repo} --request-changes --body "Hardening gaps require remediation. See coverage table."
-# or
-gh pr review {N} --repo {owner/repo} --comment --body "Hardening gaps noted — tracked for future phase."
+gh pr review {N} --repo {owner/repo} --request-changes --body "Hardening findings need addressing before merge. See coverage table."
 ```
 
 ---
