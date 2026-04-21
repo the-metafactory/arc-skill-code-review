@@ -1,7 +1,7 @@
 # arc-manifest.yaml — capability declaration
 schema: arc/v1
 name: code-review
-version: 0.1.1
+version: 0.2.0
 type: skill
 tier: custom
 
@@ -16,6 +16,10 @@ provides:
     - trigger: "review PR"
     - trigger: "code review"
     - trigger: "security audit"
+  slash_commands:
+    - name: "review-pr"
+      file: "prompt/review-pr.md"
+      description: "Review or sweep a PR in a fresh-context sub-agent using the CodeReview skill"
 
 capabilities:
   bash:

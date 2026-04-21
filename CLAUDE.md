@@ -16,11 +16,14 @@ skill/
     StandardReview.md   — Content-aware auto-selection review
     SecurityReview.md   — Focused security + code quality review
     FullReview.md       — All 5 lenses applied
+prompt/
+  review-pr.md          — `/review-pr` slash-command prompt (spawns fresh-context sub-agent to run this skill against a PR)
 ```
 
 - `skill/SKILL.md` — Entry point. YAML frontmatter for skill activation, workflow routing table, lens selection logic.
 - `skill/Workflows/*.md` — Executable workflow files. Each defines a step-by-step review procedure.
 - `skill/*.md` (non-SKILL) — Lens reference documents. Loaded on-demand by workflows. Each contains a detailed checklist for one review perspective.
+- `prompt/*.md` — Slash-command prompts distributed alongside the skill. Consumed by Claude Code as user commands (e.g., `/review-pr`).
 
 ## SOP Activation
 
