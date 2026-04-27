@@ -186,9 +186,15 @@ Verdict criteria:
 There is no "comment" verdict. If the review found something worth mentioning, it's worth addressing. Do not label findings as "non-blocking" — all review feedback must be resolved before merge.
 
 ```bash
-gh pr review {N} --repo {owner/repo} --approve --body "Security review passed. OWASP categories checked. Zero findings."
-# or
-gh pr review {N} --repo {owner/repo} --request-changes --body "Security findings need addressing before merge."
+# Verdict body MUST contain a `recommend: <merge|request-changes>` line
+# so pilot's fetch parses the verdict either way. Both branches fall back
+# to --comment when GitHub blocks the self-action — see
+# FullReview.md#step-12 for the canonical fallback pattern.
+gh pr review {N} --repo {owner/repo} --approve --body "$VERDICT_BODY" 2>/tmp/cr-err \
+  || { grep -q "Cannot approve" /tmp/cr-err && gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY"; }
+# or, when findings exist:
+gh pr review {N} --repo {owner/repo} --request-changes --body "$VERDICT_BODY" 2>/tmp/cr-err \
+  || { grep -q "Can not request changes" /tmp/cr-err && gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY"; }
 ```
 
 ---
