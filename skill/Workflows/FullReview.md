@@ -199,6 +199,14 @@ themselves opened get blocked on `--approve`** — GitHub returns
 *"Cannot approve own pull request"* and the verdict review silently
 drops if there's no recovery (issue #5).
 
+The agent issues exactly one of the two blocks below — the *approve*
+block when zero findings, the *request-changes* block otherwise — never
+both. No `if [ "{recommendation}" = "merge" ]` placeholder branching:
+that is fragile under template substitution (a missed substitute
+silently picks the wrong branch). The verdict body is composed once and
+shared between the formal review and the fallback comment so the
+`recommend:` line parses identically either way.
+
 ```bash
 VERDICT_BODY="$(cat <<'EOF'
 Full review (6 lenses + duplication) — {summary line}.
@@ -207,22 +215,31 @@ verdict: blockers={N} majors={N} nits={N} — recommend: {merge|request-changes}
 EOF
 )"
 
-if [ "{recommendation}" = "merge" ]; then
-  gh pr review {N} --repo {owner/repo} --approve --body "$VERDICT_BODY" 2>/tmp/cr-err || {
-    if grep -q "Cannot approve own pull request\|Can not approve your own pull request" /tmp/cr-err; then
-      gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY (posted as comment-review — bot account opened the PR; --approve blocked by GitHub)"
-    else
-      cat /tmp/cr-err >&2; exit 1
-    fi
-  }
-else
-  gh pr review {N} --repo {owner/repo} --request-changes --body "$VERDICT_BODY" 2>/tmp/cr-err || {
-    if grep -q "Can not request changes on your own pull request" /tmp/cr-err; then
-      gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY (posted as comment-review — bot account opened the PR; --request-changes blocked by GitHub)"
-    else
-      cat /tmp/cr-err >&2; exit 1
-    fi
-  }
+ERR=$(mktemp -t cr-verdict-err.XXXXXX)
+trap 'rm -f "$ERR"' EXIT
+```
+
+**Approve case** (zero findings only):
+
+```bash
+if ! gh pr review {N} --repo {owner/repo} --approve --body "$VERDICT_BODY" 2>"$ERR"; then
+  if grep -qE "(Cannot|Can not) approve (own|your own) pull request" "$ERR"; then
+    gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY (posted as comment-review — bot account opened the PR; --approve blocked by GitHub)"
+  else
+    cat "$ERR" >&2; exit 1
+  fi
+fi
+```
+
+**Request-changes case** (any findings):
+
+```bash
+if ! gh pr review {N} --repo {owner/repo} --request-changes --body "$VERDICT_BODY" 2>"$ERR"; then
+  if grep -qE "(Cannot|Can not) request changes on your own pull request" "$ERR"; then
+    gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY (posted as comment-review — bot account opened the PR; --request-changes blocked by GitHub)"
+  else
+    cat "$ERR" >&2; exit 1
+  fi
 fi
 ```
 

@@ -149,16 +149,43 @@ Verdict criteria:
 
 There is no "comment" verdict. If the review found something worth mentioning, it's worth addressing. Do not label findings as "non-blocking" — all review feedback must be resolved before merge.
 
+Use the canonical verdict-submission pattern from
+`FullReview.md#step-12-submit-review`:
+
 ```bash
-# Verdict body MUST contain a `recommend: <merge|request-changes>` line
-# so pilot's fetch parses the verdict either way. Both branches fall back
-# to --comment when GitHub blocks the self-action — see
-# FullReview.md#step-12 for the canonical fallback pattern.
-gh pr review {N} --repo {owner/repo} --approve --body "$VERDICT_BODY" 2>/tmp/cr-err \
-  || { grep -q "Cannot approve" /tmp/cr-err && gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY"; }
-# or, when findings exist:
-gh pr review {N} --repo {owner/repo} --request-changes --body "$VERDICT_BODY" 2>/tmp/cr-err \
-  || { grep -q "Can not request changes" /tmp/cr-err && gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY"; }
+VERDICT_BODY="$(cat <<'EOF'
+Hardening review — defensive patterns verified. {N} findings.
+
+verdict: blockers={N} majors={N} nits={N} — recommend: {merge|request-changes}
+EOF
+)"
+
+ERR=$(mktemp -t cr-verdict-err.XXXXXX)
+trap 'rm -f "$ERR"' EXIT
+```
+
+**Approve case** (zero findings only):
+
+```bash
+if ! gh pr review {N} --repo {owner/repo} --approve --body "$VERDICT_BODY" 2>"$ERR"; then
+  if grep -qE "(Cannot|Can not) approve (own|your own) pull request" "$ERR"; then
+    gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY (posted as comment-review — bot account opened the PR; --approve blocked by GitHub)"
+  else
+    cat "$ERR" >&2; exit 1
+  fi
+fi
+```
+
+**Request-changes case** (any findings):
+
+```bash
+if ! gh pr review {N} --repo {owner/repo} --request-changes --body "$VERDICT_BODY" 2>"$ERR"; then
+  if grep -qE "(Cannot|Can not) request changes on your own pull request" "$ERR"; then
+    gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY (posted as comment-review — bot account opened the PR; --request-changes blocked by GitHub)"
+  else
+    cat "$ERR" >&2; exit 1
+  fi
+fi
 ```
 
 ---
