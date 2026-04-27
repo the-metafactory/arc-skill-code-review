@@ -152,10 +152,45 @@ Determine verdict based on findings:
 
 There is no "comment" verdict. If the review found something worth mentioning, it's worth addressing. Do not label findings as "non-blocking" — all review feedback must be resolved before merge.
 
+Use the canonical verdict-submission pattern from
+`FullReview.md#step-12-submit-review` — single body, one of two blocks
+issued, mktemp'd stderr capture, both error-message variants matched,
+fail-loud on unrecognised errors:
+
 ```bash
-gh pr review {N} --repo {owner/repo} --approve --body "Lenses applied: {list}. Zero findings."
-# or
-gh pr review {N} --repo {owner/repo} --request-changes --body "Findings need addressing before merge. Lenses applied: {list}."
+VERDICT_BODY="$(cat <<'EOF'
+Lenses applied: {list}. {N} findings.
+
+verdict: blockers={N} majors={N} nits={N} — recommend: {merge|request-changes}
+EOF
+)"
+
+ERR=$(mktemp -t cr-verdict-err.XXXXXX)
+trap 'rm -f "$ERR"' EXIT
+```
+
+**Approve case** (zero findings only):
+
+```bash
+if ! gh pr review {N} --repo {owner/repo} --approve --body "$VERDICT_BODY" 2>"$ERR"; then
+  if grep -qE "(Cannot|Can not) approve (own|your own) pull request" "$ERR"; then
+    gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY (posted as comment-review — bot account opened the PR; --approve blocked by GitHub)"
+  else
+    cat "$ERR" >&2; exit 1
+  fi
+fi
+```
+
+**Request-changes case** (any findings):
+
+```bash
+if ! gh pr review {N} --repo {owner/repo} --request-changes --body "$VERDICT_BODY" 2>"$ERR"; then
+  if grep -qE "(Cannot|Can not) request changes on your own pull request" "$ERR"; then
+    gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY (posted as comment-review — bot account opened the PR; --request-changes blocked by GitHub)"
+  else
+    cat "$ERR" >&2; exit 1
+  fi
+fi
 ```
 
 ---

@@ -183,17 +183,73 @@ gh pr comment {N} --repo {owner/repo} --body "## Full Review Summary: {owner/rep
 
 ### Step 12: Submit Review
 
+Compose the verdict body once — same shape regardless of approve vs
+request-changes — so pilot's `fetch` parses the `recommend:` line cleanly
+either way:
+
+```
+Full review (6 lenses + duplication) — {summary line}.
+
+verdict: blockers={N} majors={N} nits={N} — recommend: {merge|request-changes}
+```
+
+Submit it, falling back to `--comment` whenever GitHub blocks the
+self-action. The fallback matters because **bots reviewing a PR they
+themselves opened get blocked on `--approve`** — GitHub returns
+*"Cannot approve own pull request"* and the verdict review silently
+drops if there's no recovery (issue #5).
+
+The agent issues exactly one of the two blocks below — the *approve*
+block when zero findings, the *request-changes* block otherwise — never
+both. No `if [ "{recommendation}" = "merge" ]` placeholder branching:
+that is fragile under template substitution (a missed substitute
+silently picks the wrong branch). The verdict body is composed once and
+shared between the formal review and the fallback comment so the
+`recommend:` line parses identically either way.
+
 ```bash
-gh pr review {N} --repo {owner/repo} --approve --body "Full review (6 lenses + duplication) passed. Zero findings."
-# or
-gh pr review {N} --repo {owner/repo} --request-changes --body "Full review found findings that should be addressed. See per-lens comments."
+VERDICT_BODY="$(cat <<'EOF'
+Full review (6 lenses + duplication) — {summary line}.
+
+verdict: blockers={N} majors={N} nits={N} — recommend: {merge|request-changes}
+EOF
+)"
+
+ERR=$(mktemp -t cr-verdict-err.XXXXXX)
+trap 'rm -f "$ERR"' EXIT
+```
+
+**Approve case** (zero findings only):
+
+```bash
+if ! gh pr review {N} --repo {owner/repo} --approve --body "$VERDICT_BODY" 2>"$ERR"; then
+  if grep -qE "(Cannot|Can not) approve (own|your own) pull request" "$ERR"; then
+    gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY (posted as comment-review — bot account opened the PR; --approve blocked by GitHub)"
+  else
+    cat "$ERR" >&2; exit 1
+  fi
+fi
+```
+
+**Request-changes case** (any findings):
+
+```bash
+if ! gh pr review {N} --repo {owner/repo} --request-changes --body "$VERDICT_BODY" 2>"$ERR"; then
+  if grep -qE "(Cannot|Can not) request changes on your own pull request" "$ERR"; then
+    gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY (posted as comment-review — bot account opened the PR; --request-changes blocked by GitHub)"
+  else
+    cat "$ERR" >&2; exit 1
+  fi
+fi
 ```
 
 Verdict criteria:
-- **Approve** only if there are ZERO findings across all lenses — no criticals, no warnings, no suggestions, no nits
-- **Request changes** if there are ANY findings at all — every finding surfaced in a review must be addressed (fixed or explicitly acknowledged with rationale) before merge
+- **Approve** (recommend: merge) only if there are ZERO findings across all lenses — no criticals, no majors, no warnings, no suggestions, no nits.
+- **Request changes** if there are ANY findings at all — every finding surfaced in a review must be addressed (fixed or explicitly acknowledged with rationale) before merge.
 
-There is no "comment" verdict. If the review found something worth mentioning, it's worth addressing. Do not label findings as "non-blocking" — all review feedback must be resolved before merge.
+There is no separate "comment" verdict. The `--comment` form is the
+fallback shape for self-PR scenarios *only*; the `recommend:` line in
+the body keeps the verdict parseable either way.
 
 ---
 
