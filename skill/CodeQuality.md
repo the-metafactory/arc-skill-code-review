@@ -104,15 +104,22 @@ gh api repos/{owner}/{repo}/contents \
   --jq '[.[] | .name] | map(select(test("^(eslint\\.config\\.|biome\\.json$|\\.eslintrc)"))) | .[]'
 
 # Is there a CI check on this PR whose name matches /lint/i?
-gh pr checks {N} --repo {owner/repo} --json name,state,bucket,workflow \
-  --jq '.[] | select(.name | test("lint"; "i") or (.workflow | test("lint"; "i")))'
+# Note the parens around each test() call — `or` does not bind tighter than `|`,
+# so without them the second test would consume the result of the first.
+# Also guard against the empty-checks case: `gh pr checks` exits non-zero with
+# plain text "no checks reported on the '<branch>' branch" when a PR has not
+# yet triggered any workflow runs (e.g. PRs opened before the lint workflow
+# existed, draft PRs, PRs gated by a path filter). Treat that as "no CI lint
+# check" and fall through to state 2.
+gh pr checks {N} --repo {owner/repo} --json name,state,bucket,workflow 2>/dev/null \
+  | jq '.[] | select((.name | test("lint"; "i")) or (.workflow | test("lint"; "i")))'
 ```
 
 The `gh pr checks --json` shape returned by each entry is:
-- `name` — job name (e.g. `Lint`, `Lint, Typecheck & Unit Tests`).
-- `workflow` — workflow file's display name (also matched, since cortex calls the job `lint` inside `ci.yml`).
+- `name` — job name (e.g. `Lint`, `lint`, `Lint, Typecheck & Unit Tests`). Match case-insensitively.
+- `workflow` — workflow file's display name. Match this too — cortex calls the job `Lint` inside `ci.yml` (workflow name = `CI`), myelin has a dedicated workflow named `Lint, Typecheck & Unit Tests` with job name `lint`. Matching both fields catches both patterns.
 - `state` — one of `SUCCESS`, `FAILURE`, `IN_PROGRESS`, `PENDING`, `SKIPPED`, `NEUTRAL`, `CANCELLED`.
-- `bucket` — coarser grouping: `pass`, `fail`, `pending`, `skipping`.
+- `bucket` — coarser grouping: `pass`, `fail`, `pending`, `skipping`. Use this for the simple "did it pass" check; use `state` when you need to distinguish in-progress from pending.
 
 If state 2 or 3, you're done with this section. Move on.
 
@@ -122,17 +129,29 @@ If state 2 or 3, you're done with this section. Move on.
   - `state: FAILURE` (or `bucket: fail`) → **critical** finding. The PR cannot merge until the gate is green. Pull the actual lint output (next step) so the author doesn't have to dig.
   - `state: IN_PROGRESS` / `PENDING` (or `bucket: pending`) → **suggestion** ("lint result pending"). Note it, do not pretend you verified what's not there, and re-check at re-review time.
   - `state: SUCCESS` (or `bucket: pass`) → green check, move on.
-- [ ] **New violations on touched lines only.** When the lint job failed, locate the failing run and read its log:
+- [ ] **New violations on touched lines only.** When the lint job failed, locate the failing job and read its log. **Use `--log` (full), not `--log-failed`** — `--log-failed` only contains the workflow's terminal `##[error]Process completed with exit code 1.` marker, not the eslint output that preceded it. The eslint violations live in the step's stdout, which `--log-failed` strips.
   ```bash
-  # The link field on the failing check is of the form
+  # The link on the failing check has the form
   # https://github.com/{owner}/{repo}/actions/runs/{run-id}/job/{job-id}
-  gh pr checks {N} --repo {owner/repo} --json name,state,link \
-    --jq '.[] | select(.name | test("lint"; "i")) | .link'
+  gh pr checks {N} --repo {owner/repo} --json name,state,link 2>/dev/null \
+    | jq -r '.[] | select((.name | test("lint"; "i"))) | .link'
 
-  # Extract run-id from the URL (the integer after /runs/) and:
-  gh run view {run-id} --repo {owner/repo} --log-failed
+  # Extract run-id (integer after /runs/) and job-id (integer after /job/), then
+  # pull the lint job's full log. The --job filter scopes output to that job only.
+  gh run view {run-id} --repo {owner/repo} --log --job={job-id}
   ```
-  Cross-reference each `<file>:<line>:<col>` (eslint format) or `<file>:<line>:<col> <severity>` (biome format) against `gh pr diff {N}`. Only flag violations on lines this PR added or modified — pre-existing lint debt on untouched lines is not this PR's problem. An eslint/biome error on a touched line is a **warning** finding (or **critical** if it's the actual cause of the gate being red).
+
+  Each log line is tab-separated and prefixed: `{job_name}\t{step_name}\t{ISO_timestamp} {content}`. Strip the prefix before pattern-matching eslint output:
+  ```bash
+  gh run view {run-id} --repo {owner/repo} --log --job={job-id} \
+    | awk -F'\t' '$2 ~ /ESLint|Lint|lint/ {sub(/^[0-9TZ:.-]+ /, "", $3); print $3}' \
+    | grep -E '^\s*[^:[:space:]]+:[0-9]+:[0-9]+'
+  ```
+  eslint's default formatter emits `<file>:<line>:<col>  <severity>  <message>  <rule-id>`. Biome's default emits `<file>:<line>:<col> <severity>: <message>`. Cross-reference each `<file>:<line>` pair against the PR's diff:
+  ```bash
+  gh pr diff {N} --repo {owner/repo} | grep -E '^(\+\+\+ |@@)' | head -200
+  ```
+  Only flag violations on lines this PR added or modified — pre-existing lint debt on untouched lines is not this PR's problem. An eslint/biome error on a touched line is a **warning** finding (or **critical** if the gate being red is solely due to violations in this PR's diff). If the gate is red due to a *non-lint reason* upstream (bun install failure, missing system dep, runner cache miss), that's still **critical** but report it as an infrastructure finding rather than a code-quality finding — Echo's review is about code, not the CI runner's pantry.
 - [ ] **No `eslint-disable` / `biome-ignore` comments without justification.** Inline (`// eslint-disable-next-line <rule>`, `// biome-ignore <rule>`) and file-level (`/* eslint-disable */`) disables added in this PR must each carry a one-line comment explaining *why* the rule is being suppressed. Drive-by disables to silence the gate are a discipline regression — flag every undocumented one as **warning**.
 - [ ] **No silent lint-config relaxation.** Diffs that touch `eslint.config.*`, `tsconfig.eslint.json`, `.eslintrc*`, or `biome.json` and downgrade a rule (`error → warn`, `warn → off`) or remove a rule entirely are a structural change to the quality bar. Each downgrade is a **warning** finding even if the diff line count is tiny; the author must justify each in the PR description, not bury it in a config change.
 - [ ] **Auto-fix loops are not reviews.** If the PR title or body claims `lint --fix` was run, still read the resulting diff line-by-line. `--fix` can rewrite semantics (e.g. reordering imports across side-effectful modules, collapsing method chains). The lint gate going green does not mean the diff is correct.
