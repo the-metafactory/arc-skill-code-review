@@ -71,7 +71,7 @@ These define user-specific preferences. If the directory does not exist, proceed
 
 Each lens is a detailed checklist loaded on-demand by workflows:
 
-- `CodeQuality.md` — Empty catches, dead code, naming, error handling, test coverage
+- `CodeQuality.md` — Empty catches, dead code, naming, error handling, test coverage, lint-gate compliance (CI lint job status + new violations on touched lines)
 - `Security.md` — OWASP Top 10: injection, auth, data exposure, input validation, dependencies
 - `Hardening.md` — API defensive patterns: auth layer, CORS, rate limiting, audit logging, PII handling, input boundaries
 - `Architecture.md` — SRP, coupling, pattern consistency, abstraction level, API surface

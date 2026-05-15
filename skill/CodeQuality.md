@@ -75,6 +75,31 @@
 - [ ] **Repeated patterns across files signal a missing abstraction.** If multiple files follow the same boilerplate sequence, consider whether a shared helper or base class is warranted.
 - [ ] **DRY applies to knowledge, not just code.** Two functions with similar-looking code that serve different purposes and will evolve independently are NOT duplication — forced extraction would create coupling.
 
+### 9. Linting
+
+The repo runs an enforced lint gate iff `package.json` has a `lint` script *or* a known config exists at the root (`eslint.config.js`, `eslint.config.ts`, `biome.json`, `.eslintrc*`). Detect once, then act.
+
+- [ ] **Lint gate detected.** Confirm via `gh api repos/{owner}/{repo}/contents/package.json` (or read the PR's working copy) which lint command this repo runs. State it in the review header — e.g. `lint gate: bun run lint (eslint)`. If no script or config is present, say so explicitly (`lint gate: none`) and skip the rest of this section.
+- [ ] **CI lint job is green on the PR head.** Look up the lint check:
+  ```bash
+  gh pr checks {N} --repo {owner/repo}
+  # When you need the run ID for log retrieval:
+  gh run list --branch {headRefName} --workflow Lint --limit 1 --repo {owner/repo} \
+    --json databaseId,conclusion,status
+  ```
+  Map the result:
+  - `conclusion: failure` → **critical** finding. The PR cannot merge until the gate is green. Pull the actual eslint output so the author doesn't have to dig.
+  - `status: in_progress` or check not yet run → note as **suggestion** ("lint result pending") and proceed; do not pretend you verified what's not there.
+  - `conclusion: success` → green check, move on.
+- [ ] **New violations on touched lines only.** When the lint job failed, read its log and cross-reference each violation against the PR's diff:
+  ```bash
+  gh run view {run-id} --repo {owner/repo} --log-failed
+  ```
+  An eslint error on a line this PR added or modified is a **warning** finding (or **critical** if it's the actual reason the gate is red). Pre-existing eslint debt on untouched lines is *not* this PR's problem — do not flag it. Echo's review is about what this diff introduces, not the repo's historical lint backlog.
+- [ ] **No `eslint-disable` comments without justification.** Inline (`// eslint-disable-next-line <rule>`) and file-level (`/* eslint-disable */`) disables added in this PR must each carry a one-line comment explaining *why* the rule is being suppressed. Drive-by disables to silence the gate are a discipline regression — flag every undocumented one as **warning**.
+- [ ] **No silent lint-config relaxation.** Diffs that touch `eslint.config.*`, `tsconfig.eslint.json`, `.eslintrc*`, or `biome.json` and downgrade a rule (`error → warn`, `warn → off`) or remove a rule entirely are a structural change to the quality bar. Each downgrade is a **warning** finding even if the diff line count is tiny; the author must justify each in the PR description, not bury it in a config change.
+- [ ] **Auto-fix loops are not reviews.** If the PR title or body claims `lint --fix` was run, still read the resulting diff line-by-line. `--fix` can rewrite semantics (e.g. reordering imports across side-effectful modules, collapsing chains). The lint gate going green does not mean the diff is correct.
+
 ---
 
 ## Severity Guide
@@ -93,3 +118,11 @@
 | Copy-pasted block with 3+ similar lines | **warning** |
 | Re-implementation of existing utility | **warning** |
 | Forced extraction creating coupling | **nit** (don't flag) |
+| CI lint job failing on this PR | **critical** |
+| New eslint error on a line this PR touches | **warning** |
+| New eslint warning on a line this PR touches | **suggestion** |
+| `eslint-disable` added without justification comment | **warning** |
+| Lint config rule downgrade (`error → warn → off`) without rationale | **warning** |
+| Lint check pending / not yet run | **suggestion** (note, don't block) |
+| Pre-existing eslint error on a line this PR did not touch | not flagged |
+| Repo has no lint script or config | not flagged (state `lint gate: none`) |
