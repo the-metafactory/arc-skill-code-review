@@ -77,28 +77,65 @@
 
 ### 9. Linting
 
-The repo runs an enforced lint gate iff `package.json` has a `lint` script *or* a known config exists at the root (`eslint.config.js`, `eslint.config.ts`, `biome.json`, `.eslintrc*`). Detect once, then act.
+Echo reads the **CI lint gate**, she does not run the linter herself. CI is what actually blocks merge; running a separate local lint would risk disagreeing with CI (different config resolution, different `node_modules`) and would mean Echo executing arbitrary PR code via `bun install` postinstall hooks. The CI-output path is cheap, safe, and matches the gate that gates the PR.
 
-- [ ] **Lint gate detected.** Confirm via `gh api repos/{owner}/{repo}/contents/package.json` (or read the PR's working copy) which lint command this repo runs. State it in the review header — e.g. `lint gate: bun run lint (eslint)`. If no script or config is present, say so explicitly (`lint gate: none`) and skip the rest of this section.
-- [ ] **CI lint job is green on the PR head.** Look up the lint check:
+**The whole section is conditional on a lint gate existing.** Decide once at the top, then proceed.
+
+#### Step 0 — Detect the lint gate
+
+Three states. Decide which one this repo is in *before* doing anything else, and state it in the review header:
+
+1. **`lint gate: ci` (full gate)** — both of the following are true:
+   - `package.json` has a `lint` script *or* a known config exists at the repo root (`eslint.config.js`, `eslint.config.ts`, `eslint.config.mjs`, `biome.json`, `.eslintrc*`, `.eslintrc.cjs`).
+   - The PR has a CI check whose name matches `/lint/i` (case-insensitive). Detect via `gh pr checks {N} --repo {owner/repo}` and scan the `Name` column.
+
+2. **`lint gate: local-only`** — lint script or config exists, but no `/lint/i` check is present on the PR. Lint is configured but unenforced. Note it in the header, optionally flag it as a **suggestion** ("repo has lint config but no CI gate"), and **skip the CI-output checks** below. Do not run lint locally — that's out of scope for review mode.
+
+3. **`lint gate: none`** — neither a lint script nor a known config file exists. State `lint gate: none` in the review header and **skip the rest of this section entirely**. Do not invent findings about missing lint; that belongs in an ecosystem-level discussion, not a per-PR review. (arc, meta-factory currently fall here.)
+
+Lookup commands for the detection step:
+```bash
+# Does the repo have a lint script in package.json?
+gh api repos/{owner}/{repo}/contents/package.json \
+  --jq '.content' | base64 -d | jq -r '.scripts.lint // "none"'
+
+# Does the repo have a known lint config at root?
+gh api repos/{owner}/{repo}/contents \
+  --jq '[.[] | .name] | map(select(test("^(eslint\\.config\\.|biome\\.json$|\\.eslintrc)"))) | .[]'
+
+# Is there a CI check on this PR whose name matches /lint/i?
+gh pr checks {N} --repo {owner/repo} --json name,state,bucket,workflow \
+  --jq '.[] | select(.name | test("lint"; "i") or (.workflow | test("lint"; "i")))'
+```
+
+The `gh pr checks --json` shape returned by each entry is:
+- `name` — job name (e.g. `Lint`, `Lint, Typecheck & Unit Tests`).
+- `workflow` — workflow file's display name (also matched, since cortex calls the job `lint` inside `ci.yml`).
+- `state` — one of `SUCCESS`, `FAILURE`, `IN_PROGRESS`, `PENDING`, `SKIPPED`, `NEUTRAL`, `CANCELLED`.
+- `bucket` — coarser grouping: `pass`, `fail`, `pending`, `skipping`.
+
+If state 2 or 3, you're done with this section. Move on.
+
+#### Steps 1-5 — Only when `lint gate: ci`
+
+- [ ] **CI lint job result.** Map `state` to a finding:
+  - `state: FAILURE` (or `bucket: fail`) → **critical** finding. The PR cannot merge until the gate is green. Pull the actual lint output (next step) so the author doesn't have to dig.
+  - `state: IN_PROGRESS` / `PENDING` (or `bucket: pending`) → **suggestion** ("lint result pending"). Note it, do not pretend you verified what's not there, and re-check at re-review time.
+  - `state: SUCCESS` (or `bucket: pass`) → green check, move on.
+- [ ] **New violations on touched lines only.** When the lint job failed, locate the failing run and read its log:
   ```bash
-  gh pr checks {N} --repo {owner/repo}
-  # When you need the run ID for log retrieval:
-  gh run list --branch {headRefName} --workflow Lint --limit 1 --repo {owner/repo} \
-    --json databaseId,conclusion,status
-  ```
-  Map the result:
-  - `conclusion: failure` → **critical** finding. The PR cannot merge until the gate is green. Pull the actual eslint output so the author doesn't have to dig.
-  - `status: in_progress` or check not yet run → note as **suggestion** ("lint result pending") and proceed; do not pretend you verified what's not there.
-  - `conclusion: success` → green check, move on.
-- [ ] **New violations on touched lines only.** When the lint job failed, read its log and cross-reference each violation against the PR's diff:
-  ```bash
+  # The link field on the failing check is of the form
+  # https://github.com/{owner}/{repo}/actions/runs/{run-id}/job/{job-id}
+  gh pr checks {N} --repo {owner/repo} --json name,state,link \
+    --jq '.[] | select(.name | test("lint"; "i")) | .link'
+
+  # Extract run-id from the URL (the integer after /runs/) and:
   gh run view {run-id} --repo {owner/repo} --log-failed
   ```
-  An eslint error on a line this PR added or modified is a **warning** finding (or **critical** if it's the actual reason the gate is red). Pre-existing eslint debt on untouched lines is *not* this PR's problem — do not flag it. Echo's review is about what this diff introduces, not the repo's historical lint backlog.
-- [ ] **No `eslint-disable` comments without justification.** Inline (`// eslint-disable-next-line <rule>`) and file-level (`/* eslint-disable */`) disables added in this PR must each carry a one-line comment explaining *why* the rule is being suppressed. Drive-by disables to silence the gate are a discipline regression — flag every undocumented one as **warning**.
+  Cross-reference each `<file>:<line>:<col>` (eslint format) or `<file>:<line>:<col> <severity>` (biome format) against `gh pr diff {N}`. Only flag violations on lines this PR added or modified — pre-existing lint debt on untouched lines is not this PR's problem. An eslint/biome error on a touched line is a **warning** finding (or **critical** if it's the actual cause of the gate being red).
+- [ ] **No `eslint-disable` / `biome-ignore` comments without justification.** Inline (`// eslint-disable-next-line <rule>`, `// biome-ignore <rule>`) and file-level (`/* eslint-disable */`) disables added in this PR must each carry a one-line comment explaining *why* the rule is being suppressed. Drive-by disables to silence the gate are a discipline regression — flag every undocumented one as **warning**.
 - [ ] **No silent lint-config relaxation.** Diffs that touch `eslint.config.*`, `tsconfig.eslint.json`, `.eslintrc*`, or `biome.json` and downgrade a rule (`error → warn`, `warn → off`) or remove a rule entirely are a structural change to the quality bar. Each downgrade is a **warning** finding even if the diff line count is tiny; the author must justify each in the PR description, not bury it in a config change.
-- [ ] **Auto-fix loops are not reviews.** If the PR title or body claims `lint --fix` was run, still read the resulting diff line-by-line. `--fix` can rewrite semantics (e.g. reordering imports across side-effectful modules, collapsing chains). The lint gate going green does not mean the diff is correct.
+- [ ] **Auto-fix loops are not reviews.** If the PR title or body claims `lint --fix` was run, still read the resulting diff line-by-line. `--fix` can rewrite semantics (e.g. reordering imports across side-effectful modules, collapsing method chains). The lint gate going green does not mean the diff is correct.
 
 ---
 
@@ -118,11 +155,12 @@ The repo runs an enforced lint gate iff `package.json` has a `lint` script *or* 
 | Copy-pasted block with 3+ similar lines | **warning** |
 | Re-implementation of existing utility | **warning** |
 | Forced extraction creating coupling | **nit** (don't flag) |
-| CI lint job failing on this PR | **critical** |
-| New eslint error on a line this PR touches | **warning** |
-| New eslint warning on a line this PR touches | **suggestion** |
-| `eslint-disable` added without justification comment | **warning** |
+| CI lint job failing on this PR (`lint gate: ci`) | **critical** |
+| New eslint/biome error on a line this PR touches | **warning** |
+| New eslint/biome warning on a line this PR touches | **suggestion** |
+| `eslint-disable` / `biome-ignore` added without justification comment | **warning** |
 | Lint config rule downgrade (`error → warn → off`) without rationale | **warning** |
 | Lint check pending / not yet run | **suggestion** (note, don't block) |
-| Pre-existing eslint error on a line this PR did not touch | not flagged |
-| Repo has no lint script or config | not flagged (state `lint gate: none`) |
+| Pre-existing lint error on a line this PR did not touch | not flagged |
+| Repo has lint config but no CI gate (`lint gate: local-only`) | **suggestion** (optional, note in header) |
+| Repo has no lint script or config (`lint gate: none`) | not flagged (state `lint gate: none`) |
