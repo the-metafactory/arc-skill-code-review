@@ -130,3 +130,98 @@ User: "full review PR #42"
 -> Summary comment with lens-by-lens results
 -> Verdict based on aggregate findings
 ```
+
+## Structured verdict block (cortex#237)
+
+When this skill is invoked through cortex's capability-dispatch path (Echo or any other agent driven by `review.request.*`), the LAST thing the response emits MUST be a fenced ```json block matching the schema below. cortex's `src/runner/review-pipeline.ts` parser reads the final fenced block in the CC output and builds a `review.verdict.<kind>` envelope from it. The parser is the only machine-readable handshake between this skill and cortex — any drift in the shape (renamed field, typo'd enum, missing key) collapses the dispatch to a `cant_do` failure and stalls pilot's review loop.
+
+The contract is pinned by the round-trip test at `the-metafactory/cortex` →
+`src/runner/__tests__/skill-verdict-block.contract.test.ts`. When that test is intentionally updated, the fixtures here must move with it.
+
+### When to emit
+
+- Emit the block at the **very end** of the response — it must be the last fenced block in the output (the parser uses last-block-wins, so earlier prose, inline JSON, and lens-internal scratch are tolerated).
+- Emit it AFTER the `gh pr review` submission so that `github_review_id`, `github_review_url`, `submitted_at`, and `commit_id` reflect the review GitHub actually accepted (capture them from the `gh api` response or `gh pr view --json reviews`).
+- Use a ```json fence (lowercase `json` is canonical; the parser regex is case-insensitive, but stick to lowercase).
+- Emit exactly one block per review run. Do not emit empty/placeholder blocks while a workflow is still in progress — earlier blocks are tolerated by the parser but pollute operator-facing transcripts.
+
+### Required fields
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `verdict` | enum | One of `"approved"`, `"changes-requested"`, `"commented"`. **EXACTLY** these strings — case sensitive. Typos (`"approve"`, `"request_changes"`, `"comment"`) cause `cant_do`. |
+| `summary` | string | Short prose mirroring the verdict-body `recommend:` line. Include `blockers=N majors=N nits=N — recommend: …` so the dashboard tile reads cleanly. |
+| `github_review_id` | integer | The numeric ID from the `gh pr review` response (e.g. `2459200001`). Capture via `gh api .../pulls/{N}/reviews` or `gh pr view --json reviews`. |
+| `github_review_url` | string | Full HTTPS URL to the review (`https://github.com/{owner}/{repo}/pull/{N}#pullrequestreview-{id}`). |
+| `submitted_at` | string | ISO-8601 timestamp the review was submitted (`2026-05-17T08:15:42Z`). |
+| `commit_id` | string | Full 40-char SHA of the head commit reviewed. |
+| `findings` | object | `{ blockers: int, majors: int, nits: int }` — aggregated counts, all three keys required even if zero. Per-finding records live in the inline GH comments, not here. |
+| `inline_comments` | integer | Count of inline review comments posted as part of this review. |
+
+### Worked example — `approved` (clean PR)
+
+````
+I've completed the CodeQuality, Security, and Architecture lenses on PR #229.
+No blockers, majors, or nits surfaced — the change is tightly scoped, well-tested, and
+internally consistent. Submitting an approving GitHub review.
+
+```json
+{
+  "verdict": "approved",
+  "summary": "verdict: blockers=0 majors=0 nits=0 — recommend: approve. Clean change, no findings across CodeQuality / Security / Architecture.",
+  "github_review_id": 2459200001,
+  "github_review_url": "https://github.com/the-metafactory/cortex/pull/229#pullrequestreview-2459200001",
+  "submitted_at": "2026-05-17T08:15:42Z",
+  "commit_id": "d4e5f6a7b8c9012345678901234567890abcdef1",
+  "findings": { "blockers": 0, "majors": 0, "nits": 0 },
+  "inline_comments": 0
+}
+```
+````
+
+### Worked example — `changes-requested` (real review with findings)
+
+````
+I've completed the full review. Two non-blocking maintainability issues and three
+nit-level style suggestions surfaced — see inline comments on GitHub. Requesting
+changes via `gh pr review --request-changes`.
+
+```json
+{
+  "verdict": "changes-requested",
+  "summary": "verdict: blockers=0 majors=2 nits=3 — recommend: request-changes. Two maintainability concerns (silent catch in pipeline; nullable propagation in adapter) and three style nits (naming, doc-comment alignment, redundant guard).",
+  "github_review_id": 2459200002,
+  "github_review_url": "https://github.com/the-metafactory/cortex/pull/229#pullrequestreview-2459200002",
+  "submitted_at": "2026-05-17T08:22:11Z",
+  "commit_id": "d4e5f6a7b8c9012345678901234567890abcdef1",
+  "findings": { "blockers": 0, "majors": 2, "nits": 3 },
+  "inline_comments": 5
+}
+```
+````
+
+### Worked example — `commented` (informational only)
+
+````
+Review complete. One nit-level naming observation surfaced — not blocking, not
+approval-worthy on its own. Submitting an informational `gh pr review --comment`.
+
+```json
+{
+  "verdict": "commented",
+  "summary": "verdict: blockers=0 majors=0 nits=1 — recommend: comment-only. Single naming nit on the new helper; author's call.",
+  "github_review_id": 2459200003,
+  "github_review_url": "https://github.com/the-metafactory/cortex/pull/229#pullrequestreview-2459200003",
+  "submitted_at": "2026-05-17T08:27:55Z",
+  "commit_id": "d4e5f6a7b8c9012345678901234567890abcdef1",
+  "findings": { "blockers": 0, "majors": 0, "nits": 1 },
+  "inline_comments": 1
+}
+```
+````
+
+### Why this matters
+
+The parser at cortex `src/runner/review-pipeline.ts` (capability-dispatch consumer, cortex#237 PR-5) routes the block into a `review.verdict.<approved|changes-requested|commented>` envelope that pilot subscribes to. No block → `dispatch.task.failed` with `cant_do` → pilot stalls and the review-loop never closes. The `verdict` enum is the routing key, hence its strict spelling.
+
+When the skill is invoked outside cortex (operator running it manually, paste-into-Claude usage), the block is harmless extra output — emit it unconditionally.

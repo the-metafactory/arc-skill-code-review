@@ -224,6 +224,22 @@ if ! gh pr review {N} --repo {owner/repo} --request-changes --body "$VERDICT_BOD
 fi
 ```
 
+### Step 8: Emit structured verdict block (cortex#237)
+
+After the GitHub review is submitted, emit a fenced ```json verdict block as the LAST element of the response — per `SKILL.md` → "Structured verdict block (cortex#237)". cortex's `src/runner/review-pipeline.ts` parser reads the final fenced block to build the `review.verdict.<kind>` bus envelope; omit the block and pilot stalls with `cant_do`.
+
+Capture the review metadata immediately after submission:
+
+```bash
+REVIEW_JSON=$(gh api "repos/{owner}/{repo}/pulls/{N}/reviews" --jq '.[-1]')
+REVIEW_ID=$(echo "$REVIEW_JSON" | jq -r '.id')
+REVIEW_URL=$(echo "$REVIEW_JSON" | jq -r '.html_url')
+SUBMITTED_AT=$(echo "$REVIEW_JSON" | jq -r '.submitted_at')
+COMMIT_ID=$(echo "$REVIEW_JSON" | jq -r '.commit_id')
+```
+
+Then emit the block as the final fenced section of the response. See `SKILL.md` for the full schema, enum constraint on `verdict` (`approved` | `changes-requested` | `commented` — case sensitive), and worked examples.
+
 ---
 
 ## Output Format
