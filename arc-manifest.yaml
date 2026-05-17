@@ -2,13 +2,15 @@
 schema: arc/v1
 name: code-review
 namespace: metafactory
-version: 0.4.1
+version: 0.4.2
 type: skill
 tier: custom
 
-author:
-  name: mellanon
-  github: mellanon
+authors:
+  - name: Jens-Christian Fischer
+    github: jcfischer
+  - name: mellanon
+    github: mellanon
 
 license: MIT
 
