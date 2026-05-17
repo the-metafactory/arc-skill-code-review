@@ -1,8 +1,8 @@
 # arc-manifest.yaml — capability declaration
 schema: arc/v1
 name: code-review
-namespace: mellanon
-version: 0.4.0
+namespace: metafactory
+version: 0.4.1
 type: skill
 tier: custom
 
