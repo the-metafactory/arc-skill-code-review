@@ -7,6 +7,23 @@ description: Multi-lens pull request review with automated findings. USE WHEN re
 
 Multi-lens PR review skill with content-aware auto-selection. Applies code quality, security, architecture, ecosystem compliance, and performance lenses based on what the PR actually touches.
 
+## Who runs this skill
+
+This skill is invoked by **Claude-Code-backed reviewers** — Echo, Luna, and any other agent whose substrate is Claude Code and who claims a `code-review.<flavor>` capability via cortex's review consumer. Triggered through cortex#237's capability-dispatch path: a `review.request.*` envelope wakes Claude Code, Claude Code reads this SKILL.md, runs the lenses, posts the inline GH comments + the `gh pr review`, and emits the verdict block at the bottom (see `## Structured verdict block` below). Pilot is the typical publisher of those review-request envelopes.
+
+**Sage does NOT invoke this skill.** Sage (pi.dev / claude / codex substrate, sage#40) runs its own lens pipeline in `~/work/mf/sage/src/lenses/`, hosted in-process by cortex's ReviewConsumer. Sage emits the verdict envelope directly from `reviewPr` — no markdown SKILL.md, no fenced verdict block. Both reviewers terminate at the same `local.{org}.{stack}.code.pr.review.{approved|changes-requested|commented}` envelope shape so downstream consumers (pilot loop, cortex dashboard) don't care which reviewer claimed.
+
+**Routing summary:**
+
+| Capability | Claimed by (default cortex.yaml) | Skill path |
+|------------|----------------------------------|------------|
+| `code-review.typescript`, `.python`, `.rust`, `.go`, `.sql`, `.docs` | sage | sage's in-process pipeline — NOT this skill |
+| `code-review.security`, `.generic` | sage + fern | sage in-process / fern Claude Code via this skill |
+| GitLab MR (`payload.forge: "gitlab"`) | fern | this skill, fern's substrate |
+| Other repos (non-metafactory) | Luna / Echo | this skill, their substrate |
+
+Updates to **this SKILL.md** affect the Claude-Code-backed reviewers only. To update sage's lens behavior, edit `~/work/mf/sage/src/lenses/*.ts`. Updates to **the verdict envelope shape** affect both — those live in `the-metafactory/myelin` (envelope schema) and `the-metafactory/cortex/docs/design-pi-dev-review-agent.md`.
+
 ## Customization
 
 **Before executing, check for user customizations at:**
