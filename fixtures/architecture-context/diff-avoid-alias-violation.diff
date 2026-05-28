@@ -1,0 +1,20 @@
+--- a/src/runner/dispatch-listener.ts
++++ b/src/runner/dispatch-listener.ts
+@@ -10,6 +10,18 @@ import type { Envelope } from "../bus/envelope.ts";
+ import { logger } from "../common/logger.ts";
+
++/**
++ * Resolve the dispatch-source identity by reverse-looking-up the platform DID.
++ * NOTE: this resolution should arguably live in the adapter, but for now we
++ * paper over the missing adapter-side population by doing it here.
++ */
++export async function resolveDispatchSource(envelope: Envelope): Promise<string> {
++  const sender = envelope.dispatchSource?.identity;
++  if (sender) return sender;
++  // fall back to reverse lookup
++  return reverseLookup(envelope);
++}
++
+ export class DispatchListener {
+   async onEnvelope(envelope: Envelope) {
+     logger.info("received", envelope);

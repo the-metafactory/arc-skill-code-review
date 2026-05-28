@@ -6,6 +6,28 @@
 
 ## Checklist
 
+### 0. Load canonical architecture docs (FIRST)
+
+**Before applying any heuristic checklist item below**, load the target repo's own architecture source-of-truth documents. Later checklist items will cross-check the diff against these docs; heuristics §§1–7 remain the fallback whenever canonical docs are absent.
+
+Load `ArchitectureDocs.md` from the skill root for the full protocol. The summary:
+
+- [ ] **Fetch canonical docs** from the target repo (not this skill's repo):
+  - `CONTEXT.md` (bounded-context glossary — **grill-with-docs** output)
+  - `docs/architecture.md` (layered model + componentisation)
+  - `compass/ecosystem/CONTEXT-MAP.md` (cross-context reconciliation — ecosystem repos only)
+  - Optional: `docs/design-*.md` only when cited from `docs/architecture.md`
+- [ ] **Cache loaded docs** for the duration of this review session — multiple lens passes must not re-fetch.
+- [ ] **Parse glossary entries** from `CONTEXT.md` (and `CONTEXT-MAP.md` when present) — every `**Term**:` block with its definition + `_Avoid_:` alias list, tagged with section + source line. See `ArchitectureDocs.md` §§2–3 for the parser contract.
+- [ ] **Parse layer + boundary rules** from `docs/architecture.md` — the layer table (M1–M7 or equivalent) plus boundary sentences containing `does NOT`, `never`, `must not`, `owns no`, `belongs at`, `consumes`. See `ArchitectureDocs.md` §4.
+- [ ] **Cross-check the diff** against the parsed rules: Avoid-alias use, cross-layer imports in the wrong direction, new responsibilities contradicting documented roles. Each finding MUST cite the source doc + line. See `ArchitectureDocs.md` §§5–6.
+- [ ] **Emit provenance line** in the lens output, even when no docs were found. Canonical shape — every doc gets a `(loaded)` or `(not-found)` parenthesized state token, comma-separated:
+  - Loaded: `architecture-docs: CONTEXT.md (loaded), docs/architecture.md (loaded), CONTEXT-MAP.md (not-found)`
+  - Fallback (zero docs): `architecture-docs: CONTEXT.md (not-found), docs/architecture.md (not-found), CONTEXT-MAP.md (not-found) — running legacy heuristic checklist only`
+  - Use hyphenated `(not-found)` everywhere. Never `(missing)`, `none-found`, or bare tokens. See `ArchitectureDocs.md` §1.
+
+When none of the canonical docs are present, **fall back to the heuristic checklist (§§1–7) unmodified**. This is the no-regression guarantee for older repos that have not yet been through a grill-with-docs session.
+
 ### 1. Single Responsibility Principle
 
 - [ ] **Each module has one reason to change.** A file that handles HTTP routing AND database queries AND email sending violates SRP.
@@ -66,10 +88,19 @@
 |---------|----------|
 | Circular dependency introduced | **critical** |
 | Breaking change to public API without migration | **critical** |
+| Cross-layer import in the wrong direction (per `docs/architecture.md`) | **critical** |
 | Business logic in infrastructure layer | **warning** |
 | New pattern without justification | **warning** |
 | Function over 25 lines | **suggestion** |
 | Function with multiple responsibilities | **warning** |
+| Exact / case-variant use of a `CONTEXT.md` `_Avoid_:` alias as a **public** symbol | **warning** |
+| Exact / case-variant use of a `CONTEXT.md` `_Avoid_:` alias as an **internal** symbol | **nit** |
+| Avoid alias appearing only in prose / comments | **advisory** |
+| New responsibility on a class contradicting documented role | **warning** |
 | Premature abstraction (one implementation) | **suggestion** |
+| New term introduced with no entry in `CONTEXT.md` (prompt for grill-with-docs) | **suggestion** |
+| Fuzzy / substring match (Avoid alias is part of a larger compound symbol) | **nit** |
 | Minor naming convention inconsistency | **nit** |
 | Missing export documentation | **nit** |
+
+All `CONTEXT.md`-/`docs/architecture.md`-derived findings MUST cite the source doc + line per the format in `ArchitectureDocs.md` §6.
