@@ -1,0 +1,13 @@
+--- a/lib/utils.js
++++ b/lib/utils.js
+@@ -1,3 +1,10 @@
++/**
++ * Generic helper for a repo that has no CONTEXT.md / docs/architecture.md.
++ * The Architecture lens MUST fall back to its heuristic checklist here and
++ * emit the `architecture-docs: none-found` provenance line.
++ */
++function sumPositive(numbers) {
++  return numbers.filter(function (n) { return n > 0; }).reduce(function (a, b) { return a + b; }, 0);
++}
++
+ module.exports = {};

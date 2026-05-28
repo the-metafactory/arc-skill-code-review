@@ -74,7 +74,18 @@ Record findings: severity, lens=hardening, file/line, finding, fix.
 
 Load `Architecture.md` from the skill root. Apply the full structural checklist.
 
-Evaluate:
+**First load the target repo's canonical architecture docs** (Architecture.md §0 + `ArchitectureDocs.md`):
+
+```bash
+# All three are best-effort — missing files are expected and non-fatal.
+gh api "repos/{owner}/{repo}/contents/CONTEXT.md" --jq '.content' 2>/dev/null | base64 -d
+gh api "repos/{owner}/{repo}/contents/docs/architecture.md" --jq '.content' 2>/dev/null | base64 -d
+gh api "repos/{owner}/{repo}/contents/compass/ecosystem/CONTEXT-MAP.md" --jq '.content' 2>/dev/null | base64 -d
+```
+
+Parse `CONTEXT.md` glossary entries (canonical term + `_Avoid_:` alias lists) and `docs/architecture.md` layer/boundary rules per `ArchitectureDocs.md` §§2–4. Cross-check the diff against the parsed rules; each CONTEXT-/architecture-derived finding cites the source doc + line.
+
+Then evaluate the heuristic checklist:
 - Does each changed module maintain single responsibility?
 - Are new dependencies between modules justified?
 - Does the change follow or deviate from existing patterns?
@@ -82,6 +93,14 @@ Evaluate:
 - Are there breaking changes to public APIs?
 
 Record findings: severity, lens=architecture, file/line, finding, fix.
+
+Emit a provenance line in the lens output regardless of whether docs were found:
+
+```
+architecture-docs: CONTEXT.md (loaded), docs/architecture.md (loaded), CONTEXT-MAP.md (not found)
+```
+
+— or `architecture-docs: none-found — running legacy heuristic checklist only` in the fallback case.
 
 ### Step 7: Run EcosystemCompliance Lens
 

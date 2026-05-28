@@ -1,0 +1,17 @@
+--- a/src/adapters/discord.ts
++++ b/src/adapters/discord.ts
+@@ -10,6 +10,15 @@ import type { Envelope } from "../bus/envelope.ts";
+ import { logger } from "../common/logger.ts";
+
++/**
++ * Resolve the originator identity at the adapter boundary, per
++ * CONTEXT.md (canonical role `Adapter`, §Surfaces): resolution belongs
++ * at the adapter, not at the listener.
++ */
++export async function resolveOriginator(envelope: Envelope): Promise<string> {
++  return envelope.originator?.identity ?? lookupDid(envelope);
++}
++
+ export class DiscordAdapter {
+   async onPlatformEvent(event: DiscordEvent) {
+     const envelope = toEnvelope(event);

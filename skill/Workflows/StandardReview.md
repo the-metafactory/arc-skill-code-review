@@ -92,7 +92,7 @@ For each finding, record:
 For each additional lens detected in Step 3, load the corresponding reference file from the skill root and apply its checklist:
 
 - Security lens -> load `Security.md`
-- Architecture lens -> load `Architecture.md`
+- Architecture lens -> load `Architecture.md` **and** apply its §0 doc-loading step first — fetch `CONTEXT.md`, `docs/architecture.md`, and `compass/ecosystem/CONTEXT-MAP.md` from the target repo, parse glossary + boundary rules per `ArchitectureDocs.md`, and cross-check the diff against them. Emit the `architecture-docs:` provenance line regardless of whether docs were found.
 - EcosystemCompliance lens -> load `EcosystemCompliance.md`
 - Performance lens -> load `Performance.md`
 
