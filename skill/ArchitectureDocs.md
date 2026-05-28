@@ -41,7 +41,55 @@ This makes it visible *which* docs informed the review and which were absent —
 
 ---
 
-## 2. Fallback when no docs found
+## 2. Glossary parsing — CONTEXT.md
+
+`CONTEXT.md` follows a stable shape produced by **grill-with-docs**. Each glossary entry looks like:
+
+```markdown
+**TermName**:
+One-sentence canonical definition that may run across multiple lines until the
+next blank line.
+_Avoid_: alias1, alias2, alias3
+```
+
+Extract one **rule** per entry:
+
+| Field | Source |
+|-------|--------|
+| `term` | The bolded heading (between `**` markers, before the colon). Canonical noun. |
+| `definition` | The prose body up to the next blank line or next `**Term**:` heading. |
+| `avoid` | Comma-separated list under `_Avoid_:` (may be the next line or appear inline). |
+| `section` | The nearest preceding `###` or `##` heading — gives the rule its categorical context (e.g. "Assistants & agents", "The bus"). |
+| `source` | `CONTEXT.md:{line-number}` of the term heading — cited verbatim in findings. |
+
+**Parsing rules:**
+
+- Term headings are identified by the regex `^\*\*([A-Z][A-Za-z0-9 -]+)\*\*:` at start of line. Case matters — only bolded title-case terms with a trailing colon.
+- `_Avoid_:` may appear on the same line as the closing definition or on its own line. Aliases are comma-separated; trim whitespace and trailing punctuation from each.
+- Some entries do not declare `_Avoid_:` — those still count as canonical-term rules but produce no alias-violation findings.
+- Embedded backtick code spans (e.g. `` `tasks` ``) inside the definition are normal prose; do not treat as code.
+
+**Cite-on-finding format:**
+
+```
+CONTEXT.md (canonical term `{term}`, §{section}) — avoids: {alias-list}
+```
+
+---
+
+## 3. Ecosystem boundary terms — CONTEXT-MAP.md
+
+`compass/ecosystem/CONTEXT-MAP.md` (when present) reconciles terms that cross repo boundaries. Parse it the same way as `CONTEXT.md` but tag each rule with `scope: ecosystem` instead of `scope: repo`. Ecosystem rules win against repo rules in the cite text:
+
+```
+CONTEXT-MAP.md (ecosystem boundary term `{term}`) — repo aliases: {avoid-list}
+```
+
+When a term appears in both `CONTEXT.md` and `CONTEXT-MAP.md`, the ecosystem reconciliation takes precedence — the repo entry typically defers to the ecosystem definition for boundary-spanning concepts.
+
+---
+
+## 4. Fallback when no docs found
 
 If zero canonical docs are found, the lens proceeds with its legacy heuristic checklist (`Architecture.md` §§1–7) only and records:
 
@@ -53,4 +101,4 @@ No CONTEXT-cited findings are emitted in this mode. This guarantees zero regress
 
 ---
 
-*Parsing and cross-check protocols are added in subsequent commits — this commit establishes the doc-discovery + provenance contract only.*
+*Layer-model parsing and diff cross-check are added in a follow-up commit. This commit establishes glossary parsing only.*
