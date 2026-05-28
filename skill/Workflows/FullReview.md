@@ -78,9 +78,14 @@ Load `Architecture.md` from the skill root. Apply the full structural checklist.
 
 ```bash
 # All three are best-effort — missing files are expected and non-fatal.
-gh api "repos/{owner}/{repo}/contents/CONTEXT.md" --jq '.content' 2>/dev/null | base64 -d
-gh api "repos/{owner}/{repo}/contents/docs/architecture.md" --jq '.content' 2>/dev/null | base64 -d
-gh api "repos/{owner}/{repo}/contents/compass/ecosystem/CONTEXT-MAP.md" --jq '.content' 2>/dev/null | base64 -d
+# `tr -d '\n'` strips RFC 2045 base64 line-wrapping before decode (macOS `base64 -d`
+# rejects embedded newlines without `-i`); see ArchitectureDocs.md §1.
+gh api "repos/{owner}/{repo}/contents/CONTEXT.md" --jq '.content' 2>/dev/null \
+  | tr -d '\n' | base64 -d
+gh api "repos/{owner}/{repo}/contents/docs/architecture.md" --jq '.content' 2>/dev/null \
+  | tr -d '\n' | base64 -d
+gh api "repos/{owner}/{repo}/contents/compass/ecosystem/CONTEXT-MAP.md" --jq '.content' 2>/dev/null \
+  | tr -d '\n' | base64 -d
 ```
 
 Parse `CONTEXT.md` glossary entries (canonical term + `_Avoid_:` alias lists) and `docs/architecture.md` layer/boundary rules per `ArchitectureDocs.md` §§2–4. Cross-check the diff against the parsed rules; each CONTEXT-/architecture-derived finding cites the source doc + line.
@@ -94,13 +99,17 @@ Then evaluate the heuristic checklist:
 
 Record findings: severity, lens=architecture, file/line, finding, fix.
 
-Emit a provenance line in the lens output regardless of whether docs were found:
+Emit a provenance line in the lens output regardless of whether docs were found — canonical shape per `ArchitectureDocs.md` §1:
 
 ```
-architecture-docs: CONTEXT.md (loaded), docs/architecture.md (loaded), CONTEXT-MAP.md (not found)
+architecture-docs: CONTEXT.md (loaded), docs/architecture.md (loaded), CONTEXT-MAP.md (not-found)
 ```
 
-— or `architecture-docs: none-found — running legacy heuristic checklist only` in the fallback case.
+— or, in the fallback case (zero canonical docs found), every entry marked `(not-found)`:
+
+```
+architecture-docs: CONTEXT.md (not-found), docs/architecture.md (not-found), CONTEXT-MAP.md (not-found) — running legacy heuristic checklist only
+```
 
 ### Step 7: Run EcosystemCompliance Lens
 
