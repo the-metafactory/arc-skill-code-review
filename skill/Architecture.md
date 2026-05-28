@@ -6,6 +6,22 @@
 
 ## Checklist
 
+### 0. Load canonical architecture docs (FIRST)
+
+**Before applying any heuristic checklist item below**, load the target repo's own architecture source-of-truth documents. Later checklist items will cross-check the diff against these docs; heuristics §§1–7 remain the fallback whenever canonical docs are absent.
+
+Load `ArchitectureDocs.md` from the skill root for the full protocol. The summary:
+
+- [ ] **Fetch canonical docs** from the target repo (not this skill's repo):
+  - `CONTEXT.md` (bounded-context glossary — **grill-with-docs** output)
+  - `docs/architecture.md` (layered model + componentisation)
+  - `compass/ecosystem/CONTEXT-MAP.md` (cross-context reconciliation — ecosystem repos only)
+  - Optional: `docs/design-*.md` only when cited from `docs/architecture.md`
+- [ ] **Cache loaded docs** for the duration of this review session — multiple lens passes must not re-fetch.
+- [ ] **Emit provenance line** in the lens output, even when no docs were found: `architecture-docs: CONTEXT.md (loaded), docs/architecture.md (loaded), CONTEXT-MAP.md (not found)` — or `architecture-docs: none-found — running legacy heuristic checklist only` for the fallback case.
+
+When none of the canonical docs are present, **fall back to the heuristic checklist (§§1–7) unmodified**. This is the no-regression guarantee for older repos that have not yet been through a grill-with-docs session.
+
 ### 1. Single Responsibility Principle
 
 - [ ] **Each module has one reason to change.** A file that handles HTTP routing AND database queries AND email sending violates SRP.
