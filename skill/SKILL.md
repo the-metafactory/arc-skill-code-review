@@ -78,11 +78,17 @@ These define user-specific preferences. If the directory does not exist, proceed
 | **StandardReview** | "quick review", "lightweight review" | `Workflows/StandardReview.md` |
 | **SweepReview** | "sweep PR", "--fix", "address review comments", "fix-or-justify" | `Workflows/SweepReview.md` |
 
-**SweepReview is the odd one out — it resolves findings, it does not verdict a PR.** Every other
-workflow ends by submitting a `gh pr review` verdict and emitting the structured verdict block
-(see "Structured verdict block" below). SweepReview instead works each finding under a
-fix-or-justify contract and ends at "ready for re-review" — it does **not** self-approve and emits
-**no** verdict block. It is therefore exempt from the verdict contract in "Severity → verdict".
+**Two workflows sit outside the PR-verdict contract.** Every **PR-review** workflow —
+FullReview, StandardReview, SecurityReview, HardeningReview — ends by submitting a `gh pr review`
+verdict and emitting the structured verdict block (see "Structured verdict block" below). Two
+workflows are explicit exceptions:
+
+- **SweepReview** works each finding under a fix-or-justify contract and ends at "ready for
+  re-review" — it does **not** self-approve, issues no `gh pr review`, and emits **no** verdict block.
+- **SkillReview** reviews a skill **by path** (not a PR): it issues no `gh pr review`, and reports a
+  quality-tier verdict (well-built / needs-work / major-gaps) rather than the structured verdict block.
+
+Both are therefore exempt from the verdict contract in "Severity → verdict".
 
 ## Lens Selection Logic
 
