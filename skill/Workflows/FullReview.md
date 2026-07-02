@@ -44,6 +44,46 @@ gh pr diff {N} --repo {owner/repo}
 - Build a complete mental model of the change before applying any lens
 - Note the overall change pattern: is this a feature, bugfix, refactor, or chore?
 
+### Step 0: Ground in Target-Repo Architecture Docs (compass#98 F9)
+
+**Numbered "Step 0" deliberately** (mirrors `Architecture.md` §0's own "runs first" convention) even though it sits after Steps 1–2 in file order — it is foundational grounding that must complete **before any lens runs, including lens detection**, so every review is glossary-aware regardless of which lenses end up active. This replaces the old behavior where this fetch lived only inside the conditionally-activated Architecture lens (grounding-2 gap: a behavior-change PR to existing files never triggered Architecture, so it reviewed glossary-blind).
+
+Full protocol: `ArchitectureDocs.md`. Fetch each canonical doc from the **target repo** (not this skill's repo) with a single un-piped GET — **pipe-free form only**. The `--jq '.content' | base64 -d` form is a pipe chain and is silently blocked by a review-session lockdown's bash-guard before it ever runs (see `ArchitectureDocs.md` §1):
+
+```bash
+gh api repos/{owner}/{repo}/contents/CONTEXT.md -H "Accept: application/vnd.github.raw"
+gh api repos/{owner}/{repo}/contents/docs/architecture.md -H "Accept: application/vnd.github.raw"
+gh api repos/{owner}/{repo}/contents/compass/ecosystem/CONTEXT-MAP.md -H "Accept: application/vnd.github.raw"
+```
+
+Each fetch is best-effort — a non-zero exit means the doc is absent, which is expected and non-fatal. Parse `CONTEXT.md` glossary entries (canonical term + `_Avoid_:` alias lists) and `docs/architecture.md` layer/boundary rules per `ArchitectureDocs.md` §§2–4. **Cache the loaded content for the rest of this review session** — Step 7's Architecture lens pass (and any other lens that cites the glossary) reuses this cache and must not re-fetch.
+
+**Cross-check the diff now**, independent of which lenses later activate: walk the diff already read in Step 2 for added or renamed symbols matching a `CONTEXT.md` `_Avoid_:` alias (per `ArchitectureDocs.md` §5.1–5.3 match-class + severity rules) and any cross-layer import violating `docs/architecture.md` (§5.4–5.5). Record these as `lens=architecture` findings the same as if the Architecture lens itself had produced them — this is what closes the grounding-2 gap; the findings must exist even when Step 7 below is the only place Architecture-lens machinery otherwise runs.
+
+**F17-skill — cortex ratchet escalation.** If the target repo's short name is `cortex` (any owner — forks and worktree-scoped clones carry the same manifest path), ALSO fetch the machine-readable vocab-ratchet manifest with the same pipe-free form:
+
+```bash
+gh api repos/{owner}/cortex/contents/scripts/vocab-ratchet.json -H "Accept: application/vnd.github.raw"
+```
+
+Best-effort — an absent or malformed manifest is non-fatal; proceed with the `CONTEXT.md`-only glossary check above. When loaded, parse the `terms[]` array (`{canonical, avoid[], ratchetEnforced[], severity, pattern, caseInsensitive, context}`, `carveouts.paths[]`). **The `pattern` field is authoritative over `avoid`/`ratchetEnforced`/`caseInsensitive`** — a manifest entry can double-specify case-sensitivity (e.g. `caseInsensitive: true` alongside an already-case-sensitive `pattern`); when they disagree, apply the `pattern` regex as written and do not widen it by re-applying `caseInsensitive` on top — over-broadening a deliberately case-sensitive pattern reintroduces false positives the manifest was built to avoid. A `ratchetEnforced` term match against `pattern` on an **added** line (not context or removed lines) in a path not covered by `carveouts.paths` is a **critical** finding — distinct from, and in addition to, the advisory/nit/warning `_Avoid_` findings above:
+
+```
+[critical/architecture] Ratchet term `{ratchetEnforced-term}` (pattern: `{pattern}`) on an added line — canonical: `{canonical}`. cortex/scripts/vocab-ratchet.json — {context}
+```
+
+**Emit the provenance line**, in the pinned canonical shape (every doc a `(loaded)`/`(not-found)` token, comma-separated — see `ArchitectureDocs.md` §1). This line MUST be captured now and carried into the verdict body in Step 13 so it prints on **every** review regardless of which lenses activate — its absence from a posted review becomes greppable evidence that grounding did not run:
+
+```
+architecture-docs: CONTEXT.md (loaded), docs/architecture.md (loaded), CONTEXT-MAP.md (not-found)
+```
+
+— or, with zero docs found:
+
+```
+architecture-docs: CONTEXT.md (not-found), docs/architecture.md (not-found), CONTEXT-MAP.md (not-found) — running legacy heuristic checklist only
+```
+
 ### Step 3: Run Confidentiality Lens
 
 Load `Confidentiality.md` from the skill root. Run this lens **first**, because exposure is foundational context for the whole review.
@@ -92,42 +132,16 @@ Record findings: severity, lens=hardening, file/line, finding, fix.
 
 Load `Architecture.md` from the skill root. Apply the full structural checklist.
 
-**First load the target repo's canonical architecture docs** (Architecture.md §0 + `ArchitectureDocs.md`):
+**Reuse Step 0's cache — do not re-fetch.** The target repo's canonical architecture docs (`CONTEXT.md`, `docs/architecture.md`, `compass/ecosystem/CONTEXT-MAP.md`, and — for cortex — `scripts/vocab-ratchet.json`) were already fetched, parsed, and cached in Step 0, and the diff cross-check + provenance line were already produced there. This step's job is the **heuristic** checklist on top of that grounding, not a second fetch.
 
-```bash
-# All three are best-effort — missing files are expected and non-fatal.
-# `tr -d '\n'` strips RFC 2045 base64 line-wrapping before decode (macOS `base64 -d`
-# rejects embedded newlines without `-i`); see ArchitectureDocs.md §1.
-gh api "repos/{owner}/{repo}/contents/CONTEXT.md" --jq '.content' 2>/dev/null \
-  | tr -d '\n' | base64 -d
-gh api "repos/{owner}/{repo}/contents/docs/architecture.md" --jq '.content' 2>/dev/null \
-  | tr -d '\n' | base64 -d
-gh api "repos/{owner}/{repo}/contents/compass/ecosystem/CONTEXT-MAP.md" --jq '.content' 2>/dev/null \
-  | tr -d '\n' | base64 -d
-```
-
-Parse `CONTEXT.md` glossary entries (canonical term + `_Avoid_:` alias lists) and `docs/architecture.md` layer/boundary rules per `ArchitectureDocs.md` §§2–4. Cross-check the diff against the parsed rules; each CONTEXT-/architecture-derived finding cites the source doc + line.
-
-Then evaluate the heuristic checklist:
+Evaluate the heuristic checklist:
 - Does each changed module maintain single responsibility?
 - Are new dependencies between modules justified?
 - Does the change follow or deviate from existing patterns?
 - Is the abstraction level appropriate (not too abstract, not too concrete)?
 - Are there breaking changes to public APIs?
 
-Record findings: severity, lens=architecture, file/line, finding, fix.
-
-Emit a provenance line in the lens output regardless of whether docs were found — canonical shape per `ArchitectureDocs.md` §1:
-
-```
-architecture-docs: CONTEXT.md (loaded), docs/architecture.md (loaded), CONTEXT-MAP.md (not-found)
-```
-
-— or, in the fallback case (zero canonical docs found), every entry marked `(not-found)`:
-
-```
-architecture-docs: CONTEXT.md (not-found), docs/architecture.md (not-found), CONTEXT-MAP.md (not-found) — running legacy heuristic checklist only
-```
+Record findings: severity, lens=architecture, file/line, finding, fix. Fold Step 0's CONTEXT.md/ratchet-derived findings into this lens's finding set (they are `lens=architecture` findings regardless of which step produced them) rather than duplicating the cross-check.
 
 ### Step 8: Run EcosystemCompliance Lens
 
@@ -226,6 +240,8 @@ gh pr comment {N} --repo {owner/repo} --body "## Full Review Summary: {owner/rep
 | Performance | {n} | {n} | {n} | {n} | {pass/fail} |
 | Duplication | {n} | {n} | {n} | {n} | {pass/fail} |
 
+architecture-docs: {CONTEXT.md (loaded|not-found)}, {docs/architecture.md (loaded|not-found)}, {CONTEXT-MAP.md (loaded|not-found)}
+
 ### Overall Verdict: {approved/changes-requested/commented}
 {rationale summarizing the most important findings across all lenses}"
 ```
@@ -288,9 +304,13 @@ missed substitute silently picks the wrong branch). The verdict body is composed
 once and shared between the formal review and any fallback comment so the
 `recommend:` line parses identically either way.
 
+**The `architecture-docs:` provenance line captured in Step 0 rides in this same body** — every verdict (`changes-requested` / `commented` / `approved`) is composed once and posted via `gh pr review`, so this is the one guaranteed-unconditional place the line survives regardless of verdict outcome or which lenses activated (compass#98 F9):
+
 ```bash
 VERDICT_BODY="$(cat <<'EOF'
 Full review (7 lenses + duplication) — {summary line}.
+
+architecture-docs: {CONTEXT.md (loaded|not-found)}, {docs/architecture.md (loaded|not-found)}, {CONTEXT-MAP.md (loaded|not-found)}
 
 verdict: blockers={N} majors={N} nits={N} — recommend: {merge|comment|request-changes}
 EOF
@@ -362,6 +382,8 @@ Then emit the block as the final fenced section of the response. See `SKILL.md` 
 6. EcosystemCompliance — {pass/fail} ({n} findings)
 7. Performance — {pass/fail} ({n} findings)
 8. Duplication — {pass/fail} ({n} findings)
+
+architecture-docs: {CONTEXT.md (loaded|not-found)}, {docs/architecture.md (loaded|not-found)}, {CONTEXT-MAP.md (loaded|not-found)}
 
 ### Critical Findings
 {List of critical findings requiring immediate attention — confidentiality findings by category + file:line only, never the literal}
