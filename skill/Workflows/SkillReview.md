@@ -1,14 +1,25 @@
 # SkillReview Workflow
 
-Evaluates a Claude Code skill against authoring best practices — structure, discoverability, activation reliability, progressive disclosure, and examples quality. Reports what's well-built, what's missing, and what hurts activation rates.
+Evaluates a Claude Code skill against authoring best practices — structure, discoverability, activation reliability, progressive disclosure, and examples quality. Reports what's well-built, what's missing, and what hurts activation rates. Also runs the Confidentiality lens over the skill's files when the skill ships from an exposed repo — skills (agent fragments, personas, example content) are a primary leak vector, so this flavor is not exempt.
 
 ---
 
 ## Pre-flight
 
+Skills are reviewed by path, not by PR, so exposure is derived from the skill's **containing repo** (fail CLOSED — see `Confidentiality.md` → "Exposure detection"):
+
+```bash
+# Derive the skill's repo from its git remote; map to owner/repo; check visibility.
+REMOTE=$(git -C {skill-root-path} remote get-url origin 2>/dev/null)
+# If REMOTE resolves to a GitHub repo, check it; otherwise fail closed.
+gh repo view "{owner}/{repo}" --json visibility --jq '.visibility' 2>/dev/null
+# PUBLIC ⇒ exposed. Not in a git repo / no remote / error / rate-limit / unknown ⇒ treat as EXPOSED.
+# A skill dir carrying arc-manifest*.yaml (arc-shipped) ⇒ EXPOSED even if the repo is private.
+```
+
 Output this status line before proceeding:
 ```
-SOP: skill-review | Skill: {skill-name} | Path: {skill-root-path}
+SOP: skill-review | Skill: {skill-name} | Path: {skill-root-path} | exposure={public|arc-shipped|unknown-treated-as-exposed|private} | confidentiality={active|n/a-private}
 ```
 
 ---
@@ -75,7 +86,17 @@ For each category (SK-01 through SK-08):
 
 Record findings with severity, category tag, location, finding, and fix.
 
-### Step 4: Activation Assessment
+### Step 4: Run Confidentiality Lens
+
+Load `Confidentiality.md` from the skill root and apply the full C1–C6 checklist to the skill's own files (the SKILL.md + every referenced file read in Steps 1–2). Skills are a primary leak vector — agent fragments, personas, and example content are exactly the material the confidentiality controls exist to catch.
+
+- If the skill's containing repo is **not exposed** (confirmed private and not arc-shipped), record `confidentiality=n/a-private` and skip to Step 5.
+- Otherwise (exposed, arc-shipped, or unknown-treated-as-exposed per the pre-flight check), run the lens.
+- **Rule 0 (never-quote) applies:** cite category + `file:line` only, never the suspected literal. Route "is this a real party?" questions to the private control plane, never a public surface.
+
+Record findings: severity, lens=confidentiality, file/line, category (C1–C6), finding (never the literal), fix.
+
+### Step 5: Activation Assessment
 
 Based on the description quality and trigger patterns, estimate the skill's activation tier:
 
@@ -88,7 +109,7 @@ Based on the description quality and trigger patterns, estimate the skill's acti
 
 Explain which tier the skill falls into and what would move it to the next tier.
 
-### Step 5: Post Findings
+### Step 6: Post Findings
 
 **Summary output:**
 
@@ -106,6 +127,7 @@ Explain which tier the skill falls into and what would move it to the next tier.
 | SK-06 Folder Structure | {pass/partial/fail} | {count} |
 | SK-07 Boundaries & Scope | {pass/partial/fail} | {count} |
 | SK-08 Anti-Patterns | {pass/partial/fail} | {count} |
+| Confidentiality (C1–C6) | {active/n-a-private/findings} | {count} |
 
 ### Activation Tier: {tier} (~{rate}% expected)
 {What would improve activation to next tier}
@@ -132,6 +154,7 @@ Explain which tier the skill falls into and what would move it to the next tier.
 - **Well-built** if all categories pass or partially pass, activation tier is Good or Excellent, and no critical/warning findings
 - **Needs-work** if 1-2 categories fail OR activation tier is Basic OR 2+ warning findings
 - **Major-gaps** if 3+ categories fail OR activation tier is Unoptimized OR any critical findings
+- **Confidentiality criticals are never waivable.** Any confidentiality critical (C1–C6) forces **major-gaps** regardless of quality-category scores, and cannot be reclassified up; it clears only by removal of the offending content or a linked principal-comment URL authorising the exception — never by quoting the value to argue it is safe.
 
 ---
 
@@ -141,7 +164,7 @@ Explain which tier the skill falls into and what would move it to the next tier.
 ## Skill Review: {skill-name}
 
 ### Categories
-{Category-by-category results}
+{Category-by-category results, including Confidentiality (C1–C6) — active/n-a-private}
 
 ### Activation Tier: {tier}
 {Assessment and improvement path}
