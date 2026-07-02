@@ -1,6 +1,6 @@
 # ArchitectureDocs — Canonical Architecture Source Loader
 
-**Loaded by:** the Architecture lens, as Step 0 of its checklist (see `Architecture.md` §0). May also be cited by other lenses when they need to cross-reference the target repo's bounded-context language.
+**Loaded by:** the workflow-level Step 0 in `Workflows/FullReview.md` and `Workflows/StandardReview.md` (compass#98 F9) — grounding now runs on EVERY review, before lens detection, not just when the Architecture lens activates. `Architecture.md` §0 reuses the same cached fetch rather than re-fetching. May also be cited by other lenses when they need to cross-reference the target repo's bounded-context language.
 
 **Purpose:** make the Architecture lens *aware of the target repo's own documented architecture* — bounded-context glossary, layer model, separation-of-concerns boundaries — so it can flag drift against those rules instead of operating purely on diff heuristics.
 
@@ -19,18 +19,17 @@ At the **start** of the Architecture lens, before applying any checklist, scan t
 | 3 | `compass/ecosystem/CONTEXT-MAP.md` | Ecosystem-wide cross-context reconciliation (metafactory repos that vendor the compass shared docs). |
 | 4 | `docs/design-*.md` | Optional — load only when `docs/architecture.md` cites them by filename. |
 
-**Fetching:** the PR-review workflow typically operates against a remote repo via `gh`. Fetch via:
+**Fetching (pipe-free, canonical form):** the PR-review workflow typically operates against a remote repo via `gh`, frequently inside a **review-session lockdown** whose bash-guard (`rejectsChaining` / `bash-guard.hook.ts`) denies any pipe or redirect OUTRIGHT — before the command allowlist is even consulted. Fetch each doc with a **single un-piped GET** using the raw-media `Accept` header:
 
 ```bash
-gh api "repos/{owner}/{repo}/contents/CONTEXT.md" --jq '.content' 2>/dev/null \
-  | tr -d '\n' | base64 -d
-gh api "repos/{owner}/{repo}/contents/docs/architecture.md" --jq '.content' 2>/dev/null \
-  | tr -d '\n' | base64 -d
-gh api "repos/{owner}/{repo}/contents/compass/ecosystem/CONTEXT-MAP.md" --jq '.content' 2>/dev/null \
-  | tr -d '\n' | base64 -d
+gh api repos/{owner}/{repo}/contents/CONTEXT.md -H "Accept: application/vnd.github.raw"
+gh api repos/{owner}/{repo}/contents/docs/architecture.md -H "Accept: application/vnd.github.raw"
+gh api repos/{owner}/{repo}/contents/compass/ecosystem/CONTEXT-MAP.md -H "Accept: application/vnd.github.raw"
 ```
 
-The `tr -d '\n'` strip is required: the `contents` endpoint returns base64 in RFC 2045 hard-wrapped form (newline every 60 chars). macOS `base64 -d` rejects embedded newlines without `-i`; Linux `base64 -d` is more permissive but inconsistent across distros. Stripping newlines pre-decode is portable and adds no overhead even for small files. Cortex's `CONTEXT.md` (~24KB) and `docs/architecture.md` (already past the threshold where chunking matters) are both safe with this form.
+Each command returns the fully decoded file content directly in the response body — no `--jq`, no `| base64 -d`, no `tr -d '\n'` cleanup required, and nothing to break under a pipe-denying bash-guard.
+
+⚠️ **Lockdown-inert legacy form — do not use.** An earlier revision of this doc fetched via `gh api "repos/{owner}/{repo}/contents/{path}" --jq '.content' | tr -d '\n' | base64 -d` (the `tr -d '\n'` pre-strip was needed because the `contents` endpoint returns base64 in RFC 2045 hard-wrapped form, and macOS `base64 -d` rejects embedded newlines without `-i`). That form still works in an unrestricted shell, but it is a **pipe chain**, so it is silently blocked inside any review-session lockdown before the fetch ever runs — the lens then proceeds as if the docs were absent, with no error surfaced. Always use the pipe-free `-H "Accept: application/vnd.github.raw"` form above (compass#98 F6/F9 — this is the same carrier fix cortex#1420 applied to the bus review-prompt path).
 
 A non-zero exit (file missing) is **expected and non-fatal**. Record which docs were loaded; the lens output cites them by name.
 

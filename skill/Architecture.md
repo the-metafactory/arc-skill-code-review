@@ -8,6 +8,8 @@
 
 ### 0. Load canonical architecture docs (FIRST)
 
+**Reuse, don't re-fetch (compass#98 F9).** In every workflow-driven review (`FullReview.md`, `StandardReview.md`), the canonical docs below are already fetched, parsed, and cached by the workflow-level **Step 0** — which runs before lens detection, so it fires whether or not the Architecture lens itself activates. When this lens runs as part of one of those workflows, reuse that cached content; do not re-fetch. Only perform the fetch described below when this lens is invoked standalone, outside a workflow that already ran its Step 0.
+
 **Before applying any heuristic checklist item below**, load the target repo's own architecture source-of-truth documents. Later checklist items will cross-check the diff against these docs; heuristics §§1–7 remain the fallback whenever canonical docs are absent.
 
 Load `ArchitectureDocs.md` from the skill root for the full protocol. The summary:
