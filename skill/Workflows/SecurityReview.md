@@ -197,22 +197,25 @@ gh pr comment {N} --repo {owner/repo} --body "## Security Review Summary
 
 ### Step 8: Post Verdict
 
-Verdict criteria:
+Determine the verdict from the findings, per the single normative source
+(compass `sops/pr-review.md` → "Severity → Verdict") — the same mapping
+`FullReview.md#step-13-submit-review` renders in full:
 
-- **Approve** only if there are ZERO findings — no criticals, no warnings, no suggestions, no nits
-- **Request changes** if there are ANY findings at all — every finding surfaced in a review must be addressed (fixed or explicitly acknowledged with rationale) before merge
-- **Confidentiality criticals are never waivable.** A confidentiality critical (C1–C6) is **always** `request-changes`, exempt from any rule that would otherwise permit approving with minor findings; it closes only by removal of the content or a linked principal-comment URL authorising the exception — never by quoting the value to argue it is safe.
-
-There is no "comment" verdict. If the review found something worth mentioning, it's worth addressing. Do not label findings as "non-blocking" — all review feedback must be resolved before merge.
+- `critical` → **blocker**, `warning` → **major**, `suggestion`/`nit` → **nit**.
+- `blockers > 0` OR `majors > 0` ⇒ **`changes-requested`** (recommend: request-changes).
+- only nits (no blockers, no majors) ⇒ **`commented`** (recommend: comment) — nit-only reviews do NOT block; the PR stays mergeable.
+- zero findings ⇒ **`approved`** (recommend: merge).
+- **Confidentiality criticals are never waivable.** A confidentiality critical (C1–C6) is severity-`critical` → a blocker → forces `changes-requested`, exempt from any rule that would otherwise soften a verdict; it closes only by removal of the content or a linked principal-comment URL authorising the exception — never by a justification, never by quoting the value to argue it is safe.
 
 Use the canonical verdict-submission pattern from
-`FullReview.md#step-13-submit-review`:
+`FullReview.md#step-13-submit-review` — single body, exactly one of the
+three blocks issued:
 
 ```bash
 VERDICT_BODY="$(cat <<'EOF'
 Security review — OWASP categories checked. {N} findings.
 
-verdict: blockers={N} majors={N} nits={N} — recommend: {merge|request-changes}
+verdict: blockers={N} majors={N} nits={N} — recommend: {merge|comment|request-changes}
 EOF
 )"
 
@@ -220,24 +223,30 @@ ERR=$(mktemp -t cr-verdict-err.XXXXXX)
 trap 'rm -f "$ERR"' EXIT
 ```
 
-**Approve case** (zero findings only):
+**`changes-requested` case** (`blockers > 0` OR `majors > 0`):
 
 ```bash
-if ! gh pr review {N} --repo {owner/repo} --approve --body "$VERDICT_BODY" 2>"$ERR"; then
-  if grep -qE "(Cannot|Can not) approve (own|your own) pull request" "$ERR"; then
-    gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY (posted as comment-review — bot account opened the PR; --approve blocked by GitHub)"
+if ! gh pr review {N} --repo {owner/repo} --request-changes --body "$VERDICT_BODY" 2>"$ERR"; then
+  if grep -qE "(Cannot|Can not) request changes on your own pull request" "$ERR"; then
+    gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY (posted as comment-review — bot account opened the PR; --request-changes blocked by GitHub)"
   else
     cat "$ERR" >&2; exit 1
   fi
 fi
 ```
 
-**Request-changes case** (any findings):
+**`commented` case** (only nits — no blockers, no majors):
 
 ```bash
-if ! gh pr review {N} --repo {owner/repo} --request-changes --body "$VERDICT_BODY" 2>"$ERR"; then
-  if grep -qE "(Cannot|Can not) request changes on your own pull request" "$ERR"; then
-    gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY (posted as comment-review — bot account opened the PR; --request-changes blocked by GitHub)"
+gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY"
+```
+
+**`approved` case** (zero findings):
+
+```bash
+if ! gh pr review {N} --repo {owner/repo} --approve --body "$VERDICT_BODY" 2>"$ERR"; then
+  if grep -qE "(Cannot|Can not) approve (own|your own) pull request" "$ERR"; then
+    gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY (posted as comment-review — bot account opened the PR; --approve blocked by GitHub)"
   else
     cat "$ERR" >&2; exit 1
   fi
@@ -282,6 +291,6 @@ Then emit the block as the final fenced section of the response. See `SKILL.md` 
 | warning  | {n}   | {categories} |
 | suggestion | {n} | {categories} |
 
-### Verdict: {approve/request-changes/comment}
+### Verdict: {approved/changes-requested/commented}
 {Brief rationale with security posture assessment}
 ```

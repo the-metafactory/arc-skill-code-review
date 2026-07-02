@@ -19,8 +19,23 @@ This skill is invoked by **Claude-Code-backed reviewers** — Echo, Luna, and an
 |------------|----------------------------------|------------|
 | `code-review.typescript`, `.python`, `.rust`, `.go`, `.sql`, `.docs` | sage | sage's in-process pipeline — NOT this skill |
 | `code-review.security`, `.generic` | sage + fern | sage in-process / fern Claude Code via this skill |
+| `code-review.confidentiality` | Claude-Code reviewers | this skill — exposure-gated Confidentiality lens, primary lens of a `confidentiality`-flavored FullReview |
+| `code-review.hardening` | Claude-Code reviewers | this skill — HardeningReview workflow |
+| `code-review.skill-quality` | Claude-Code reviewers | this skill — SkillReview workflow |
 | GitLab MR (`payload.forge: "gitlab"`) | fern | this skill, fern's substrate |
 | Other repos (non-metafactory) | Luna / Echo | this skill, their substrate |
+
+**Flavor catalog (cortex `REVIEW_FLAVORS`, 11 total).** The routable
+`code-review.<flavor>` capabilities are `generic`, `typescript`, `python`,
+`rust`, `go`, `sql`, `docs`, `security`, `confidentiality`, `hardening`, and
+`skill-quality`. This skill's Workflow Routing is a **subset** of that catalog:
+the language flavors + `generic` resolve to FullReview (or StandardReview when a
+quick pass is requested); `security` → SecurityReview; `confidentiality` runs the
+exposure-gated Confidentiality lens (wired into every workflow, and the primary
+lens of a `confidentiality`-flavored FullReview); `hardening` → HardeningReview;
+`skill-quality` → SkillReview. The routing must never name a flavor that is not
+in this catalog — when cortex widens `REVIEW_FLAVORS`, widen the routing here to
+match.
 
 Updates to **this SKILL.md** affect the Claude-Code-backed reviewers only. To update sage's lens behavior, edit `~/work/mf/sage/src/lenses/*.ts`. Updates to **the verdict envelope shape** affect both — those live in `the-metafactory/myelin` (envelope schema) and `the-metafactory/cortex/docs/design-pi-dev-review-agent.md`.
 
@@ -61,6 +76,13 @@ These define user-specific preferences. If the directory does not exist, proceed
 | **HardeningReview** | "hardening review", "API hardening", "hardening audit", "defensive review" | `Workflows/HardeningReview.md` |
 | **SkillReview** | "skill review", "review skill", "evaluate skill", "skill quality" | `Workflows/SkillReview.md` |
 | **StandardReview** | "quick review", "lightweight review" | `Workflows/StandardReview.md` |
+| **SweepReview** | "sweep PR", "--fix", "address review comments", "fix-or-justify" | `Workflows/SweepReview.md` |
+
+**SweepReview is the odd one out — it resolves findings, it does not verdict a PR.** Every other
+workflow ends by submitting a `gh pr review` verdict and emitting the structured verdict block
+(see "Structured verdict block" below). SweepReview instead works each finding under a
+fix-or-justify contract and ends at "ready for re-review" — it does **not** self-approve and emits
+**no** verdict block. It is therefore exempt from the verdict contract in "Severity → verdict".
 
 ## Lens Selection Logic
 
@@ -108,7 +130,7 @@ User: "review PR #42"
 -> Reads PR diff, detects API endpoint changes + new module
 -> Applies: CodeQuality + Security + Architecture
 -> Posts inline findings as PR comments
--> Posts verdict (approve/request-changes)
+-> Posts verdict (approved / changes-requested / commented)
 ```
 
 **Example 2: Focused security review**
@@ -150,6 +172,49 @@ User: "full review PR #42"
 -> Summary comment with lens-by-lens results
 -> Verdict based on aggregate findings
 ```
+
+## Severity → verdict
+
+Every review resolves to exactly one of three verdicts. The **single normative
+source** of this mapping is compass `sops/pr-review.md` → "Severity → Verdict";
+this skill, the sage engine, and the autonomous-work merge gate all resolve a
+review the same way. The buckets below are exactly the `findings` shape the
+verdict block carries (`{ blockers, majors, nits }`).
+
+**Severity → bucket:**
+
+| Severity | Bucket |
+|----------|--------|
+| `critical` | **blockers** |
+| `warning` | **majors** |
+| `suggestion` | **nits** |
+| `nit` | **nits** |
+
+**Bucket → verdict:**
+
+| Condition | Verdict | recommend: |
+|-----------|---------|-----------|
+| `blockers > 0` **OR** `majors > 0` | `changes-requested` | `request-changes` |
+| only nits (`blockers == 0` AND `majors == 0` AND `nits > 0`) | `commented` | `comment` |
+| zero findings | `approved` | `merge` |
+
+**Nit-only reviews do NOT block** — they resolve to `commented`, keeping the PR
+mergeable. A zero-tolerance "any finding blocks" rule makes the autonomous loop
+fight itself over cosmetic nits and never converge. The contract is exactly these
+three outcomes — `changes-requested` / `commented` / `approved` — and those are
+the canonical verdict tokens (they map to `gh pr review --request-changes` /
+`--comment` / `--approve`).
+
+**Confidentiality carve-out (non-waivable).** A confidentiality `critical`
+(C1–C6) is a `critical` → a **blocker** → forces `changes-requested`, and is
+**never** waivable, downgradable, or approved-over. It closes only by **removal**
+of the offending content or a **linked principal-comment URL** authorising the
+exception in the private control plane — never by a justification, never by
+quoting the value (Rule 0). See `Confidentiality.md` → "Verdict impact".
+
+**SweepReview is exempt from this contract.** The `--fix` sweep resolves each
+finding in place (fix-or-justify) and ends at "ready for re-review" — it does not
+self-approve and emits **no** verdict block. See `Workflows/SweepReview.md`.
 
 ## Structured verdict block (cortex#237)
 
@@ -202,9 +267,10 @@ internally consistent. Submitting an approving GitHub review.
 ### Worked example — `changes-requested` (real review with findings)
 
 ````
-I've completed the full review. Two non-blocking maintainability issues and three
-nit-level style suggestions surfaced — see inline comments on GitHub. Requesting
-changes via `gh pr review --request-changes`.
+I've completed the full review. Two maintainability issues (majors) and three
+nit-level style suggestions surfaced — see inline comments on GitHub. The two
+majors block (majors > 0 ⇒ changes-requested), so I'm requesting changes via
+`gh pr review --request-changes`.
 
 ```json
 {

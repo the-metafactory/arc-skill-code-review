@@ -226,41 +226,73 @@ gh pr comment {N} --repo {owner/repo} --body "## Full Review Summary: {owner/rep
 | Performance | {n} | {n} | {n} | {n} | {pass/fail} |
 | Duplication | {n} | {n} | {n} | {n} | {pass/fail} |
 
-### Overall Verdict: {approve/request-changes/comment}
+### Overall Verdict: {approved/changes-requested/commented}
 {rationale summarizing the most important findings across all lenses}"
 ```
 
 ### Step 13: Submit Review
 
-Compose the verdict body once — same shape regardless of approve vs
-request-changes — so pilot's `fetch` parses the `recommend:` line cleanly
-either way:
+**Resolve the verdict from the findings — do not invent a rule.** The single
+normative source is compass `sops/pr-review.md` → "Severity → Verdict"; this
+skill, the sage engine, and the autonomous-work merge gate all resolve a review
+the same way. Map each finding's severity to a bucket, then the buckets to one of
+exactly three verdicts (this is the `findings` shape the verdict block carries):
+
+| Severity | Bucket |
+|----------|--------|
+| `critical` | **blockers** |
+| `warning` | **majors** |
+| `suggestion` | **nits** |
+| `nit` | **nits** |
+
+| Condition | Verdict | recommend: |
+|-----------|---------|-----------|
+| `blockers > 0` **OR** `majors > 0` | `changes-requested` | `request-changes` |
+| only nits (`blockers == 0` AND `majors == 0` AND `nits > 0`) | `commented` | `comment` |
+| zero findings | `approved` | `merge` |
+
+**Nit-only reviews do NOT block.** A review whose findings are all
+`suggestion`/`nit` resolves to `commented` — the PR stays mergeable. A
+zero-tolerance "any finding blocks" rule makes the autonomous loop fight itself
+over cosmetic nits and never converge. The contract is exactly these three
+outcomes.
+
+**Confidentiality criticals are never waivable.** A confidentiality `critical`
+(C1–C6) is severity-`critical` → a **blocker** → forces `changes-requested`, and
+is exempt from every rule that would otherwise soften a verdict. It closes only
+by **removal** of the offending content or a **linked principal-comment URL**
+authorising the exception in the private control plane — never by a justification,
+and never by quoting the value to argue it is safe (Rule 0). See
+`Confidentiality.md` → "Verdict impact".
+
+Compose the verdict body once — same shape for all three outcomes — so pilot's
+`fetch` parses the `recommend:` line cleanly regardless of verdict:
 
 ```
 Full review (7 lenses + duplication) — {summary line}.
 
-verdict: blockers={N} majors={N} nits={N} — recommend: {merge|request-changes}
+verdict: blockers={N} majors={N} nits={N} — recommend: {merge|comment|request-changes}
 ```
 
-Submit it, falling back to `--comment` whenever GitHub blocks the
-self-action. The fallback matters because **bots reviewing a PR they
-themselves opened get blocked on `--approve`** — GitHub returns
-*"Cannot approve own pull request"* and the verdict review silently
-drops if there's no recovery (issue #5).
+Submit it, falling back to `--comment` whenever GitHub blocks the self-action.
+The fallback matters because **bots reviewing a PR they themselves opened get
+blocked on `--approve` and `--request-changes`** — GitHub returns *"Cannot
+approve own pull request"* and the verdict review silently drops if there's no
+recovery (issue #5). The `commented` verdict already posts a `--comment` review,
+which GitHub never blocks, so it needs no fallback.
 
-The agent issues exactly one of the two blocks below — the *approve*
-block when zero findings, the *request-changes* block otherwise — never
-both. No `if [ "{recommendation}" = "merge" ]` placeholder branching:
-that is fragile under template substitution (a missed substitute
-silently picks the wrong branch). The verdict body is composed once and
-shared between the formal review and the fallback comment so the
+The agent issues exactly **one** of the three blocks below — the one selected by
+the verdict resolved above — never more than one. No `if [ "{recommendation}" =
+"merge" ]` placeholder branching: that is fragile under template substitution (a
+missed substitute silently picks the wrong branch). The verdict body is composed
+once and shared between the formal review and any fallback comment so the
 `recommend:` line parses identically either way.
 
 ```bash
 VERDICT_BODY="$(cat <<'EOF'
 Full review (7 lenses + duplication) — {summary line}.
 
-verdict: blockers={N} majors={N} nits={N} — recommend: {merge|request-changes}
+verdict: blockers={N} majors={N} nits={N} — recommend: {merge|comment|request-changes}
 EOF
 )"
 
@@ -268,19 +300,7 @@ ERR=$(mktemp -t cr-verdict-err.XXXXXX)
 trap 'rm -f "$ERR"' EXIT
 ```
 
-**Approve case** (zero findings only):
-
-```bash
-if ! gh pr review {N} --repo {owner/repo} --approve --body "$VERDICT_BODY" 2>"$ERR"; then
-  if grep -qE "(Cannot|Can not) approve (own|your own) pull request" "$ERR"; then
-    gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY (posted as comment-review — bot account opened the PR; --approve blocked by GitHub)"
-  else
-    cat "$ERR" >&2; exit 1
-  fi
-fi
-```
-
-**Request-changes case** (any findings):
+**`changes-requested` case** (`blockers > 0` OR `majors > 0`):
 
 ```bash
 if ! gh pr review {N} --repo {owner/repo} --request-changes --body "$VERDICT_BODY" 2>"$ERR"; then
@@ -292,14 +312,23 @@ if ! gh pr review {N} --repo {owner/repo} --request-changes --body "$VERDICT_BOD
 fi
 ```
 
-Verdict criteria:
-- **Approve** (recommend: merge) only if there are ZERO findings across all lenses — no criticals, no majors, no warnings, no suggestions, no nits.
-- **Request changes** if there are ANY findings at all — every finding surfaced in a review must be addressed (fixed or explicitly acknowledged with rationale) before merge.
-- **Confidentiality criticals are never waivable.** A confidentiality critical (C1–C6) is **always** `request-changes` and is exempt from any rule that would otherwise permit approving a PR with minor findings. It closes only by **removal** of the offending content or a **linked principal-comment URL** authorising the exception in the private control plane — never by quoting the value to argue it is safe.
+**`commented` case** (only nits — no blockers, no majors):
 
-There is no separate "comment" verdict. The `--comment` form is the
-fallback shape for self-PR scenarios *only*; the `recommend:` line in
-the body keeps the verdict parseable either way.
+```bash
+gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY"
+```
+
+**`approved` case** (zero findings):
+
+```bash
+if ! gh pr review {N} --repo {owner/repo} --approve --body "$VERDICT_BODY" 2>"$ERR"; then
+  if grep -qE "(Cannot|Can not) approve (own|your own) pull request" "$ERR"; then
+    gh pr review {N} --repo {owner/repo} --comment --body "$VERDICT_BODY (posted as comment-review — bot account opened the PR; --approve blocked by GitHub)"
+  else
+    cat "$ERR" >&2; exit 1
+  fi
+fi
+```
 
 ### Step 14: Emit structured verdict block (cortex#237)
 
@@ -340,6 +369,6 @@ Then emit the block as the final fenced section of the response. See `SKILL.md` 
 ### Key Observations
 {Top 3-5 most important observations across all lenses}
 
-### Verdict: {approve/request-changes/comment}
+### Verdict: {approved/changes-requested/commented}
 {Rationale}
 ```
