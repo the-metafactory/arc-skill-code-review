@@ -150,7 +150,7 @@ Verdict criteria:
 There is no "comment" verdict. If the review found something worth mentioning, it's worth addressing. Do not label findings as "non-blocking" — all review feedback must be resolved before merge.
 
 Use the canonical verdict-submission pattern from
-`FullReview.md#step-12-submit-review`:
+`FullReview.md#step-13-submit-review`:
 
 ```bash
 VERDICT_BODY="$(cat <<'EOF'

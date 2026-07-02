@@ -1,14 +1,22 @@
 # FullReview Workflow
 
-Comprehensive review applying all 6 lenses + duplication analysis sequentially. Use this when asked for a "full review" or "comprehensive review" — nothing is skipped, every lens is applied regardless of content.
+Comprehensive review applying all 7 lenses + duplication analysis sequentially. Use this when asked for a "full review" or "comprehensive review" — nothing is skipped, every lens is applied regardless of content.
 
 ---
 
 ## Pre-flight
 
-Output this status line before proceeding:
+First determine repo exposure (fail CLOSED — see `Confidentiality.md` → "Exposure detection"):
+
+```bash
+gh repo view {owner}/{repo} --json visibility --jq '.visibility'
+# PUBLIC ⇒ exposed. error / rate-limit / timeout / empty / unknown ⇒ treat as EXPOSED.
+# arc-shipped (arc-manifest*.yaml at repo root) ⇒ EXPOSED even if private.
 ```
-SOP: pr-review | PR: {owner/repo}#{N} | Lenses: quality,security,hardening,architecture,ecosystem,performance,duplication
+
+Then output this status line before proceeding:
+```
+SOP: pr-review | PR: {owner/repo}#{N} | Lenses: confidentiality,quality,security,hardening,architecture,ecosystem,performance,duplication | exposure={public|arc-shipped|unknown-treated-as-exposed|private} | confidentiality={active|n/a-private}
 ```
 
 ---
@@ -36,13 +44,23 @@ gh pr diff {N} --repo {owner/repo}
 - Build a complete mental model of the change before applying any lens
 - Note the overall change pattern: is this a feature, bugfix, refactor, or chore?
 
-### Step 3: Run CodeQuality Lens
+### Step 3: Run Confidentiality Lens
+
+Load `Confidentiality.md` from the skill root. Run this lens **first**, because exposure is foundational context for the whole review.
+
+- If the repo is **not exposed** (confirmed private and not arc-shipped), record `confidentiality=n/a-private` and skip to Step 4.
+- If the repo is **exposed** (public, arc-shipped, or unknown-treated-as-exposed), apply the full C1–C6 checklist regardless of which files the PR touched.
+- **Rule 0 (never-quote) applies to every finding this lens produces:** cite category + `file:line` only, never the suspected literal — not in the comment, the summary, or the verdict block. Route "is this a real party?" questions to the private control plane, never a public PR comment.
+
+Record findings: severity, lens=confidentiality, file/line, category (C1–C6), finding (never the literal), fix.
+
+### Step 4: Run CodeQuality Lens
 
 Load `CodeQuality.md` from the skill root. Apply every item on the checklist.
 
 Record findings: severity, lens=quality, file/line, finding, fix.
 
-### Step 4: Run Security Lens
+### Step 5: Run Security Lens
 
 Load `Security.md` from the skill root. Apply the full OWASP Top 10 checklist systematically.
 
@@ -54,7 +72,7 @@ Even if the PR does not appear security-sensitive, check for:
 
 Record findings: severity, lens=security, file/line, finding, fix.
 
-### Step 5: Run Hardening Lens
+### Step 6: Run Hardening Lens
 
 Load `Hardening.md` from the skill root. Apply the full defensive infrastructure checklist (H-01 through H-08).
 
@@ -70,7 +88,7 @@ Check:
 
 Record findings: severity, lens=hardening, file/line, finding, fix.
 
-### Step 6: Run Architecture Lens
+### Step 7: Run Architecture Lens
 
 Load `Architecture.md` from the skill root. Apply the full structural checklist.
 
@@ -111,7 +129,7 @@ architecture-docs: CONTEXT.md (loaded), docs/architecture.md (loaded), CONTEXT-M
 architecture-docs: CONTEXT.md (not-found), docs/architecture.md (not-found), CONTEXT-MAP.md (not-found) — running legacy heuristic checklist only
 ```
 
-### Step 7: Run EcosystemCompliance Lens
+### Step 8: Run EcosystemCompliance Lens
 
 Load `EcosystemCompliance.md` from the skill root. Apply the full metafactory standards checklist.
 
@@ -124,7 +142,7 @@ Check:
 
 Record findings: severity, lens=ecosystem, file/line, finding, fix.
 
-### Step 8: Run Performance Lens
+### Step 9: Run Performance Lens
 
 Load `Performance.md` from the skill root. Apply the full performance checklist.
 
@@ -138,7 +156,7 @@ Check:
 
 Record findings: severity, lens=performance, file/line, finding, fix.
 
-### Step 9: Run Code Duplication Analysis
+### Step 10: Run Code Duplication Analysis
 
 This step runs **last**, after all other lenses, because it requires a broader view than individual lens checks.
 
@@ -160,9 +178,11 @@ This step runs **last**, after all other lenses, because it requires a broader v
 
 Record findings: severity, lens=duplication, file/line, finding, fix (reference the existing code location).
 
-### Step 10: Post Findings by Lens
+### Step 11: Post Findings by Lens
 
-Post findings organized by lens (including duplication). Use inline comments for file-specific findings, general comments for cross-cutting observations.
+Post findings organized by lens (including confidentiality and duplication). Use inline comments for file-specific findings, general comments for cross-cutting observations.
+
+For **confidentiality** findings, obey Rule 0 (never-quote): the comment states category + `file:line` + remediation, never the suspected literal.
 
 **Per-lens summary comment:**
 ```bash
@@ -187,7 +207,7 @@ gh api repos/{owner}/{repo}/pulls/{N}/comments \
   --field line={line_number}
 ```
 
-### Step 11: Post Summary and Verdict
+### Step 12: Post Summary and Verdict
 
 Post a final summary comment aggregating all lens results:
 
@@ -197,6 +217,7 @@ gh pr comment {N} --repo {owner/repo} --body "## Full Review Summary: {owner/rep
 ### Lens Results
 | Lens | Critical | Warning | Suggestion | Nit | Verdict |
 |------|----------|---------|------------|-----|---------|
+| Confidentiality | {n} | {n} | {n} | {n} | {pass/fail/n-a-private} |
 | CodeQuality | {n} | {n} | {n} | {n} | {pass/fail} |
 | Security | {n} | {n} | {n} | {n} | {pass/fail} |
 | Hardening | {n} | {n} | {n} | {n} | {pass/fail} |
@@ -209,14 +230,14 @@ gh pr comment {N} --repo {owner/repo} --body "## Full Review Summary: {owner/rep
 {rationale summarizing the most important findings across all lenses}"
 ```
 
-### Step 12: Submit Review
+### Step 13: Submit Review
 
 Compose the verdict body once — same shape regardless of approve vs
 request-changes — so pilot's `fetch` parses the `recommend:` line cleanly
 either way:
 
 ```
-Full review (6 lenses + duplication) — {summary line}.
+Full review (7 lenses + duplication) — {summary line}.
 
 verdict: blockers={N} majors={N} nits={N} — recommend: {merge|request-changes}
 ```
@@ -237,7 +258,7 @@ shared between the formal review and the fallback comment so the
 
 ```bash
 VERDICT_BODY="$(cat <<'EOF'
-Full review (6 lenses + duplication) — {summary line}.
+Full review (7 lenses + duplication) — {summary line}.
 
 verdict: blockers={N} majors={N} nits={N} — recommend: {merge|request-changes}
 EOF
@@ -274,12 +295,13 @@ fi
 Verdict criteria:
 - **Approve** (recommend: merge) only if there are ZERO findings across all lenses — no criticals, no majors, no warnings, no suggestions, no nits.
 - **Request changes** if there are ANY findings at all — every finding surfaced in a review must be addressed (fixed or explicitly acknowledged with rationale) before merge.
+- **Confidentiality criticals are never waivable.** A confidentiality critical (C1–C6) is **always** `request-changes` and is exempt from any rule that would otherwise permit approving a PR with minor findings. It closes only by **removal** of the offending content or a **linked principal-comment URL** authorising the exception in the private control plane — never by quoting the value to argue it is safe.
 
 There is no separate "comment" verdict. The `--comment` form is the
 fallback shape for self-PR scenarios *only*; the `recommend:` line in
 the body keeps the verdict parseable either way.
 
-### Step 13: Emit structured verdict block (cortex#237)
+### Step 14: Emit structured verdict block (cortex#237)
 
 After the GitHub review is submitted, capture the returned review ID + URL + submitted timestamp + commit SHA, then emit a fenced ```json verdict block as the LAST element of the response — per `SKILL.md` → "Structured verdict block (cortex#237)". This is the machine-readable handshake cortex's `src/runner/review-pipeline.ts` parser uses to build the `review.verdict.<kind>` bus envelope. Omit it and pilot stalls with `cant_do`.
 
@@ -293,7 +315,7 @@ SUBMITTED_AT=$(echo "$REVIEW_JSON" | jq -r '.submitted_at')
 COMMIT_ID=$(echo "$REVIEW_JSON" | jq -r '.commit_id')
 ```
 
-Then emit the block as the final fenced section of the response. See `SKILL.md` for the full schema, enum constraint on `verdict` (`approved` | `changes-requested` | `commented` — case sensitive), and worked examples.
+Then emit the block as the final fenced section of the response. See `SKILL.md` for the full schema, enum constraint on `verdict` (`approved` | `changes-requested` | `commented` — case sensitive), and worked examples. When confidentiality findings surfaced, they are counted in the `findings` aggregate exactly like any other lens — but their literals never appear in the block (Rule 0).
 
 ---
 
@@ -302,17 +324,18 @@ Then emit the block as the final fenced section of the response. See `SKILL.md` 
 ```
 ## Full Review: {owner/repo}#{N}
 
-### Lenses Applied (6 + duplication)
-1. CodeQuality — {pass/fail} ({n} findings)
-2. Security — {pass/fail} ({n} findings)
-3. Hardening — {pass/fail} ({n} findings)
-4. Architecture — {pass/fail} ({n} findings)
-5. EcosystemCompliance — {pass/fail} ({n} findings)
-6. Performance — {pass/fail} ({n} findings)
-7. Duplication — {pass/fail} ({n} findings)
+### Lenses Applied (7 + duplication)
+1. Confidentiality — {pass/fail/n-a-private} ({n} findings)
+2. CodeQuality — {pass/fail} ({n} findings)
+3. Security — {pass/fail} ({n} findings)
+4. Hardening — {pass/fail} ({n} findings)
+5. Architecture — {pass/fail} ({n} findings)
+6. EcosystemCompliance — {pass/fail} ({n} findings)
+7. Performance — {pass/fail} ({n} findings)
+8. Duplication — {pass/fail} ({n} findings)
 
 ### Critical Findings
-{List of critical findings requiring immediate attention}
+{List of critical findings requiring immediate attention — confidentiality findings by category + file:line only, never the literal}
 
 ### Key Observations
 {Top 3-5 most important observations across all lenses}

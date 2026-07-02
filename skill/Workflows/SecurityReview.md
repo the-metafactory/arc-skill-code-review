@@ -1,14 +1,22 @@
 # SecurityReview Workflow
 
-Focused security review applying CodeQuality + Security lenses with full OWASP Top 10 coverage. Use this when explicitly asked for a security review or when auditing security-sensitive changes.
+Focused security review applying CodeQuality + Security + Confidentiality lenses with full OWASP Top 10 coverage. Use this when explicitly asked for a security review or when auditing security-sensitive changes. Confidentiality is part of the fixed lens set here (like FullReview) — it is not optional in a security review of an exposed repo.
 
 ---
 
 ## Pre-flight
 
-Output this status line before proceeding:
+First determine repo exposure (fail CLOSED — see `Confidentiality.md` → "Exposure detection"):
+
+```bash
+gh repo view {owner}/{repo} --json visibility --jq '.visibility'
+# PUBLIC ⇒ exposed. error / rate-limit / timeout / empty / unknown ⇒ treat as EXPOSED.
+# arc-shipped (arc-manifest*.yaml at repo root) ⇒ EXPOSED even if private.
 ```
-SOP: pr-review | PR: {owner/repo}#{N} | Lenses: quality,security
+
+Then output this status line before proceeding:
+```
+SOP: pr-review | PR: {owner/repo}#{N} | Lenses: quality,security,confidentiality | exposure={public|arc-shipped|unknown-treated-as-exposed|private} | confidentiality={active|n/a-private}
 ```
 
 ---
@@ -114,7 +122,17 @@ Load `Security.md` from the skill root and apply its complete checklist. This is
 - Verify URL allowlists for outbound requests
 - Check for redirect following that could reach internal services
 
-### Step 5: Run Code Duplication Analysis
+### Step 5: Run Confidentiality Lens
+
+Load `Confidentiality.md` from the skill root.
+
+- If the repo is **not exposed** (confirmed private and not arc-shipped), record `confidentiality=n/a-private` and skip to Step 6.
+- If the repo is **exposed** (public, arc-shipped, or unknown-treated-as-exposed), apply the full C1–C6 checklist regardless of which files the PR touched.
+- **Rule 0 (never-quote) applies:** cite category + `file:line` only, never the suspected literal — not in the comment, the summary, or the verdict block. Route "is this a real party?" questions to the private control plane, never a public PR comment.
+
+Record findings: severity, lens=confidentiality, file/line, category (C1–C6), finding (never the literal), fix.
+
+### Step 6: Run Code Duplication Analysis
 
 This step runs **last**, after all other lenses, because it requires comparing the PR against the full repository.
 
@@ -137,9 +155,9 @@ This step runs **last**, after all other lenses, because it requires comparing t
 
 Record findings: severity, lens=duplication, file/line, finding, fix (reference the existing code location).
 
-### Step 6: Post Findings
+### Step 7: Post Findings
 
-Post all findings as PR comments with `[security]` tags.
+Post all findings as PR comments with `[security]` tags. Confidentiality findings are tagged `[confidentiality]` and obey Rule 0 (category + `file:line` only, never the literal).
 
 **Inline comment for specific findings:**
 ```bash
@@ -171,22 +189,24 @@ gh pr comment {N} --repo {owner/repo} --body "## Security Review Summary
 | A08 Data Integrity | {checked/clear/findings} | {count} |
 | A09 Logging | {checked/clear/findings} | {count} |
 | A10 SSRF | {checked/clear/findings} | {count} |
+| Confidentiality (C1–C6) | {active/n-a-private/findings} | {count} |
 
 ### Verdict: {verdict}
 {rationale}"
 ```
 
-### Step 7: Post Verdict
+### Step 8: Post Verdict
 
 Verdict criteria:
 
 - **Approve** only if there are ZERO findings — no criticals, no warnings, no suggestions, no nits
 - **Request changes** if there are ANY findings at all — every finding surfaced in a review must be addressed (fixed or explicitly acknowledged with rationale) before merge
+- **Confidentiality criticals are never waivable.** A confidentiality critical (C1–C6) is **always** `request-changes`, exempt from any rule that would otherwise permit approving with minor findings; it closes only by removal of the content or a linked principal-comment URL authorising the exception — never by quoting the value to argue it is safe.
 
 There is no "comment" verdict. If the review found something worth mentioning, it's worth addressing. Do not label findings as "non-blocking" — all review feedback must be resolved before merge.
 
 Use the canonical verdict-submission pattern from
-`FullReview.md#step-12-submit-review`:
+`FullReview.md#step-13-submit-review`:
 
 ```bash
 VERDICT_BODY="$(cat <<'EOF'
@@ -224,7 +244,7 @@ if ! gh pr review {N} --repo {owner/repo} --request-changes --body "$VERDICT_BOD
 fi
 ```
 
-### Step 8: Emit structured verdict block (cortex#237)
+### Step 9: Emit structured verdict block (cortex#237)
 
 After the GitHub review is submitted, emit a fenced ```json verdict block as the LAST element of the response — per `SKILL.md` → "Structured verdict block (cortex#237)". cortex's `src/runner/review-pipeline.ts` parser reads the final fenced block to build the `review.verdict.<kind>` bus envelope; omit the block and pilot stalls with `cant_do`.
 
@@ -250,6 +270,7 @@ Then emit the block as the final fenced section of the response. See `SKILL.md` 
 ### Lenses Applied
 - CodeQuality
 - Security (full OWASP Top 10)
+- Confidentiality (C1–C6, exposure-gated) — {active/n-a-private}
 
 ### OWASP Scan Results
 {Category-by-category results}
