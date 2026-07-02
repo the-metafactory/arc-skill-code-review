@@ -6,9 +6,17 @@ Content-aware PR review with automatic lens selection. CodeQuality is always app
 
 ## Pre-flight
 
-Output this status line before proceeding:
+First determine repo exposure (fail CLOSED — see `Confidentiality.md` → "Exposure detection"):
+
+```bash
+gh repo view {owner}/{repo} --json visibility --jq '.visibility'
+# PUBLIC ⇒ exposed. error / rate-limit / timeout / empty / unknown ⇒ treat as EXPOSED.
+# arc-shipped (arc-manifest*.yaml at repo root) ⇒ EXPOSED even if private.
 ```
-SOP: pr-review | PR: {owner/repo}#{N} | Lenses: {detected lenses}
+
+Exposure is repo-level, not diff-level: when the repo is exposed, Confidentiality is **always** active regardless of what the diff touches (it is not one of the content-detected lenses). Output this status line before proceeding:
+```
+SOP: pr-review | PR: {owner/repo}#{N} | Lenses: {detected lenses}[,confidentiality if exposed] | exposure={public|arc-shipped|unknown-treated-as-exposed|private} | confidentiality={active|n/a-private}
 ```
 
 ---
@@ -39,6 +47,8 @@ gh pr diff {N} --repo {owner/repo}
 ### Step 3: Detect Lenses
 
 Based on the diff content, determine which lenses to activate. **CodeQuality is always included.**
+
+**Confidentiality is NOT content-detected.** Do not look for a diff signal to activate it — it is **exposure-gated at the repo level**. If the target repo is exposed (public, arc-shipped, or unknown-treated-as-exposed per the pre-flight check), Confidentiality is **always active** for this review regardless of which files changed; if the repo is confirmed private and not arc-shipped, it does not run. It is deliberately absent from the content-signal table below.
 
 Scan the changed files and content for these signals:
 
@@ -87,7 +97,19 @@ For each finding, record:
 - **Finding:** what's wrong
 - **Fix:** how to fix it (if known)
 
-### Step 5: Run Additional Detected Lenses
+### Step 5: Run Confidentiality Lens (exposure-gated — always-on when exposed)
+
+This step is **not** conditional on detected content — run it whenever the repo is exposed (per the Step 3 note and the pre-flight exposure check).
+
+Load `Confidentiality.md` from the skill root.
+
+- If the repo is **not exposed** (confirmed private and not arc-shipped), record `confidentiality=n/a-private` and skip to Step 6.
+- If the repo is **exposed**, apply the full C1–C6 checklist regardless of which files the PR touched.
+- **Rule 0 (never-quote) applies:** cite category + `file:line` only, never the suspected literal — not in the comment, the summary, or the verdict block. Route "is this a real party?" questions to the private control plane, never a public PR comment.
+
+Record findings: severity, lens=confidentiality, file/line, category (C1–C6), finding (never the literal), fix.
+
+### Step 6: Run Additional Detected Lenses
 
 For each additional lens detected in Step 3, load the corresponding reference file from the skill root and apply its checklist:
 
@@ -98,7 +120,7 @@ For each additional lens detected in Step 3, load the corresponding reference fi
 
 Record findings in the same format as Step 4.
 
-### Step 6: Run Code Duplication Analysis
+### Step 7: Run Code Duplication Analysis
 
 This step runs **last**, after all other lenses, because it requires comparing the PR against the full repository.
 
@@ -120,9 +142,9 @@ This step runs **last**, after all other lenses, because it requires comparing t
 
 Record findings: severity, lens=duplication, file/line, finding, fix (reference the existing code location).
 
-### Step 7: Post Findings
+### Step 8: Post Findings
 
-Post findings as PR comments. Use inline comments for file-specific findings, general comments for cross-cutting findings.
+Post findings as PR comments. Use inline comments for file-specific findings, general comments for cross-cutting findings. Confidentiality findings obey Rule 0 (category + `file:line` only, never the literal).
 
 **Inline comment (specific line):**
 ```bash
@@ -143,17 +165,18 @@ gh pr comment {N} --repo {owner/repo} --body "## Review: {lens} lens
 {findings formatted as bullet list with severity tags}"
 ```
 
-### Step 8: Post Verdict
+### Step 9: Post Verdict
 
 Determine verdict based on findings:
 
 - **Approve** only if there are ZERO findings — no criticals, no warnings, no suggestions, no nits
 - **Request changes** if there are ANY findings at all — every finding surfaced in a review must be addressed (fixed or explicitly acknowledged with rationale) before merge
+- **Confidentiality criticals are never waivable.** A confidentiality critical (C1–C6) is **always** `request-changes`, exempt from any rule that would otherwise permit approving with minor findings; it closes only by removal of the content or a linked principal-comment URL authorising the exception — never by quoting the value to argue it is safe.
 
 There is no "comment" verdict. If the review found something worth mentioning, it's worth addressing. Do not label findings as "non-blocking" — all review feedback must be resolved before merge.
 
 Use the canonical verdict-submission pattern from
-`FullReview.md#step-12-submit-review` — single body, one of two blocks
+`FullReview.md#step-13-submit-review` — single body, one of two blocks
 issued, mktemp'd stderr capture, both error-message variants matched,
 fail-loud on unrecognised errors:
 
@@ -193,7 +216,7 @@ if ! gh pr review {N} --repo {owner/repo} --request-changes --body "$VERDICT_BOD
 fi
 ```
 
-### Step 9: Emit structured verdict block (cortex#237)
+### Step 10: Emit structured verdict block (cortex#237)
 
 After the GitHub review is submitted, emit a fenced ```json verdict block as the LAST element of the response — per `SKILL.md` → "Structured verdict block (cortex#237)". cortex's `src/runner/review-pipeline.ts` parser reads the final fenced block to build the `review.verdict.<kind>` bus envelope; omit the block and pilot stalls with `cant_do`.
 
@@ -220,6 +243,7 @@ After completing the review, summarize:
 
 ### Lenses Applied
 - CodeQuality (always)
+- Confidentiality (exposure-gated — {active/n-a-private})
 - {additional detected lenses with reason for activation}
 
 ### Findings Summary

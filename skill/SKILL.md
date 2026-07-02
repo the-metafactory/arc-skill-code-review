@@ -5,7 +5,7 @@ description: Multi-lens pull request review with automated findings. USE WHEN re
 
 # CodeReview
 
-Multi-lens PR review skill with content-aware auto-selection. Applies code quality, security, architecture, ecosystem compliance, and performance lenses based on what the PR actually touches.
+Multi-lens PR review skill with content-aware auto-selection. Applies code quality, security, architecture, ecosystem compliance, performance, and confidentiality lenses based on what the PR actually touches (confidentiality is gated on repo exposure, not diff content).
 
 ## Who runs this skill
 
@@ -74,13 +74,15 @@ These define user-specific preferences. If the directory does not exist, proceed
 | CLAUDE.md, arc-manifest.yaml, labels, repo config | + EcosystemCompliance |
 | Database queries, hot paths, data processing loops | + Performance |
 
+**Confidentiality is exposure-gated, not content-gated.** It is not in the content-trigger table above because it does not activate on what the diff *touches* — it activates on whether the *repo* is exposed (public or arc-shipped). On an exposed repo, Confidentiality is **always active** for every review regardless of file types; on a non-exposed private repo it does not run. Determine exposure per `Confidentiality.md` → "Exposure detection — fail CLOSED".
+
 **SecurityReview** applies CodeQuality + Security lenses regardless of content, plus duplication analysis.
 
 **HardeningReview** applies CodeQuality + Security (targeted) + Hardening lenses, plus duplication analysis. Checks for defensive infrastructure patterns rather than exploitable vulnerabilities.
 
 **SkillReview** applies the SkillQuality lens to evaluate a Claude Code skill against authoring best practices. Not part of FullReview — standalone workflow invoked on request.
 
-**FullReview** applies all 6 lenses sequentially (does not include SkillReview — that's a separate workflow).
+**FullReview** applies all 7 lenses sequentially (does not include SkillReview — that's a separate workflow).
 
 **All workflows** finish with a Code Duplication analysis step that compares the PR's new code against the entire repository, not just the diff. This catches re-implemented utilities and copy-paste from existing code that per-file lens checks miss.
 
@@ -90,6 +92,7 @@ Each lens is a detailed checklist loaded on-demand by workflows:
 
 - `CodeQuality.md` — Empty catches, dead code, naming, error handling, test coverage, lint-gate compliance (CI lint job status + new violations on touched lines)
 - `Security.md` — OWASP Top 10: injection, auth, data exposure, input validation, dependencies
+- `Confidentiality.md` — Exposure-gated leak prevention (C1–C6): real orgs/people as content, deployment fragments on shippable paths, real identities in seeds/fixtures, live platform IDs, identity-embedding codes, private→public lifts; fail-closed exposure detection + never-quote rule
 - `Hardening.md` — API defensive patterns: auth layer, CORS, rate limiting, audit logging, PII handling, input boundaries
 - `Architecture.md` — SRP, coupling, pattern consistency, abstraction level, API surface
 - `EcosystemCompliance.md` — CLAUDE.md, arc-manifest, labels, SOP table, conventional commits
@@ -142,7 +145,7 @@ User: "review skill at ~/.claude/skills/my-skill"
 ```
 User: "full review PR #42"
 -> Invokes FullReview workflow
--> Applies all 6 lenses sequentially
+-> Applies all 7 lenses sequentially
 -> Posts findings organized by lens
 -> Summary comment with lens-by-lens results
 -> Verdict based on aggregate findings
