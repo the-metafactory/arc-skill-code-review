@@ -1,6 +1,6 @@
 <!-- Generated from metafactory ecosystem template. Customize sections marked with {PLACEHOLDER}. -->
 
-# arc-skill-code-review -- Multi-lens PR review skill for Claude Code
+# metafactory-skill-code-review -- Multi-lens PR review skill for Claude Code
 
 Multi-lens PR review skill for Claude Code
 
@@ -100,7 +100,7 @@ Task: "Add a dashboard panel"
 → Activate: dev-pipeline + worktree
 → Read both SOPs
 → Output: "SOP: dev-pipeline | Branch: feat/g-300-panel | Prefix: feat:"
-→ Output: "SOP: worktree | Worktree: ../arc-skill-code-review-panel | Branch: feat/g-300-panel | Main: untouched"
+→ Output: "SOP: worktree | Worktree: ../metafactory-skill-code-review-panel | Branch: feat/g-300-panel | Main: untouched"
 ```
 
 **After merging a PR:**
@@ -137,16 +137,16 @@ blueprint lint   # Validate graph integrity
 See `compass/sops/versioning.md` for the full procedure. Key repo-specific details:
 
 - Version source of truth: `arc-manifest.yaml`
-- Release title format: `"arc-skill-code-review vX.Y.Z -- Short Description"`
-- Deploy command: `arc upgrade arc-skill-code-review`
+- Release title format: `"metafactory-skill-code-review vX.Y.Z -- Short Description"`
+- Deploy command: `arc upgrade code-review`
 
 
 ## Multi-Agent Worktree Discipline
 
 See `compass/sops/worktree-discipline.md` for the full procedure. Key repo-specific details:
 
-- Worktree directory pattern: `../arc-skill-code-review-{slug}`
-- Example: `git worktree add ../arc-skill-code-review-feature -b feat/{branch-name} main`
+- Worktree directory pattern: `../metafactory-skill-code-review-{slug}`
+- Example: `git worktree add ../metafactory-skill-code-review-feature -b feat/{branch-name} main`
 
 ## Bun
 
