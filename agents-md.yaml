@@ -9,12 +9,12 @@ generate:
   - format: claude-md
 
 # Placeholder values (substituted into templates)
-repo_name: arc-skill-code-review
+repo_name: metafactory-skill-code-review
 repo_description: "Multi-lens PR review skill for Claude Code"
 deploy_command: "arc upgrade code-review"
 version_source: arc-manifest.yaml
 release_title_format: '"CodeReview vX.Y.Z — Short Description"'
-worktree_pattern: "../arc-skill-code-review-{slug}"
+worktree_pattern: "../metafactory-skill-code-review-{slug}"
 sop_path_prefix: "compass/"
 
 # Repo-specific sections injected at marked positions in the template

@@ -1,5 +1,5 @@
 {
-  "name": "arc-skill-code-review",
+  "name": "metafactory-skill-code-review",
   "version": "0.3.2",
   "description": "Multi-lens PR review skill for Claude Code",
   "type": "module",

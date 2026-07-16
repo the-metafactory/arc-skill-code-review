@@ -1,30 +1,51 @@
 # arc-manifest.yaml — capability declaration
+# Normalized to the strict arc/v1 contract (skill-estate migration spec §4.1/§4.2,
+# the-metafactory/arc#315; WS5 Category-A). Repo renamed arc-skill-code-review →
+# metafactory-skill-code-review (2026-07-17); name derives from the new repo name.
 schema: arc/v1
 name: code-review
-namespace: metafactory
+namespace: "@metafactory"
 version: 0.4.2
 type: skill
 tier: custom
-
-authors:
-  - name: Jens-Christian Fischer
-    github: jcfischer
-  - name: mellanon
-    github: mellanon
-
+description: Multi-lens PR review skill for Claude Code — code quality, security, architecture, performance, and confidentiality lenses.
 license: MIT
+
+# Singular canonical author per the epic decision (arc#278 rejects the authors: list).
+# Historical authorship (Jens-Christian Fischer / jcfischer, mellanon) is preserved in
+# git history and CHANGELOG; the manifest carries the canonical maintainer.
+author:
+  name: Andreas Aastroem
+  github: mellanon
 
 provides:
   skill:
-    - trigger: "review PR"
+    - name: CodeReview
+      path: skill/
+      trigger: "review PR"
     - trigger: "code review"
     - trigger: "security audit"
     - trigger: "hardening review"
     - trigger: "skill review"
 
+# Full capability surface (arc/v1 requires this block with explicit empties).
 capabilities:
+  filesystem:
+    read: []
+    write: []
+  network: []
   bash:
+    # The review lenses shell out to the GitHub CLI to read the PR and post
+    # inline comments / the review verdict. Scoped to gh read + PR operations.
     allowed: true
     restricted_to:
       - "gh pr *"
       - "gh api *"
+  secrets: []
+
+depends_on:
+  tools:
+    - name: bun
+
+bundle:
+  exclude: [vendor, MEMORY, node_modules, .git, Plans, test]
